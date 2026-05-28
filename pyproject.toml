@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qspin"
+version = "0.1.0"
+description = "Generalized Ising / Blume-Capel / Blume-Emery-Griffiths inference and sampling for ordinal questionnaire data."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    {name = "Miguel Ibañez-Berganza"}, 
+    { name = "Arianna Armanetti", email = "arianna.armanetti@imtlucca.it" },
+]
+keywords = [
+    "ising", "blume-capel", "blume-emery-griffiths", "BEG",
+    "inverse problem", "pseudo-likelihood", "persistent contrastive divergence",
+    "questionnaire", "ordinal data", "psychometrics",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "numpy>=1.22",
+    "scipy>=1.10",
+    "scikit-learn>=1.1",
+    "pandas>=1.5",
+    "matplotlib>=3.6",
+    "tqdm>=4.64",
+    "statsmodels>=0.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "jupyter",
+    "ipykernel",
+    "openpyxl",
+]
+
+[project.urls]
+Homepage = "https://github.com/armanetti/qspin"
+Repository = "https://github.com/armanetti/qspin"
+Issues = "https://github.com/armanetti/qspin/issues"
+
+[tool.setuptools.packages.find]
+include = ["qspin*"]
+exclude = ["tutorials*", "tests*"]
