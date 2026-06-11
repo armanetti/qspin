@@ -18,9 +18,11 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.special import gamma
+from scipy.stats import norm as normaldist 
 
 from .histograms import wilson_score_interval
 from .jackknife import JKerror
+from .nullmodels import fourier_transform_integral, energydensity_gauss
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +351,18 @@ def plot_item_histogram(X, sim_dict_list_ising, sim_dict_list_bc, sim_dict_list_
 # ---------------------------------------------------------------------------
 # Figure: Euclidean distance histogram (maxent + Gaussian)
 # ---------------------------------------------------------------------------
+def function_to_fouriertransform(z,lambdas):
+    myarray=np.array(1-2.*z*1j*lambdas)**0.5
+    return np.prod(myarray)**-1
+
 
 def plot_E2d_histogram_maxent(X, sim_dict_list_ising, sim_dict_list_bc,
                               sim_dict_list_beg, dataset, savepath, colors, cfg,
-                              X_gauss=None):
-    r"""${\sf h}_{d_{\bf x}}$ histogram (Euclidean distance to mean)."""
+                              lambdas=None,X_gauss=None):
+    r"""Histogram ${\sf h}_{d_{\bf x}}$ (Euclidean distance to mean): maxent vs empirical.
+
+    Saved as: E2d_histogram_logscale={True|False}data={dataset}.pdf
+    """
     N = X.shape[0]
     nbins = cfg.get('nbins_E2d', 80)
     nbins_emp = cfg.get('nbins_emp', 20)
@@ -366,11 +375,13 @@ def plot_E2d_histogram_maxent(X, sim_dict_list_ising, sim_dict_list_bc,
 
     for logscale in [True, False]:
         fig, ax = plt.subplots(figsize=(7, 5))
-        _emp_hist_with_errors(ax, E2d_X, nbins_emp, N, pvalue, alpha_emp, colors['emp'])
+        HB_e2d_X = _emp_hist_with_errors(ax, E2d_X, nbins_emp, N, pvalue, alpha_emp,
+                              colors['emp'])
+        # maxent models
         for simlist, col, name in [
             (sim_dict_list_ising, colors['ising'], 'Ising'),
-            (sim_dict_list_bc, colors['bc'], 'BC'),
-            (sim_dict_list_beg, colors['beg'], 'BEG'),
+            (sim_dict_list_bc,    colors['bc'],    'BC'),
+            (sim_dict_list_beg,   colors['beg'],   'BEG'),
         ]:
             for el in simlist:
                 if condition(el):
@@ -379,17 +390,27 @@ def plot_E2d_histogram_maxent(X, sim_dict_list_ising, sim_dict_list_bc,
                             density=True, lw=1.75, color=col,
                             ls=_model_linestyle(el))
                     break
+        # Gaussian
+        ylim = ax.get_ylim()
         if X_gauss is not None:
             E2d_g = np.sum((X_gauss - np.mean(X_gauss, axis=0)) ** 2, axis=1)
-            ax.hist(E2d_g, histtype='step', bins=bins_E2d, label='Gauss',
-                    density=True, lw=1.75, color=colors['gauss'], ls='--')
+            HB_e2d_g=ax.hist(E2d_g, histtype='step', bins=bins_E2d,label='Gauss',density=True, lw=0.75, color=colors['gauss'],hatch='\\',ls='-')
+            if lambdas is not None:
+                integrand = lambda z: function_to_fouriertransform(z,lambdas)
+                maxz=10.
+                bx2_gauss = HB_e2d_g[1]
+                hx2_gauss = np.array([fourier_transform_integral(integrand,x,maxz) for x in bx2_gauss])
+                ax.plot(bx2_gauss,hx2_gauss,ls='--',lw=2.,color=colors['gauss'],label='sum-chi')
+        
+        y_min = np.sort(HB_e2d_X[0][np.where(HB_e2d_X[0]>1.0E-12)[0]])[0]
+        ax.set_ylim([np.max([ylim[0],y_min]),ylim[1]])
 
         if logscale:
             ax.set_yscale('log')
         ax.set_xlabel(r'$d_{\bf x}^2 = \|{\bf x} - \boldsymbol{\mu}\|_2^2$',
                       size=cfg.get('xlabel_fsize', 14))
         ax.set_ylabel(r'${\sf h}_{d_{\bf x}}$', size=cfg.get('xlabel_fsize', 14))
-        ax.set_title(f'Euclidean distance histogram -- {dataset}')
+        ax.set_title(f'Euclidean distance histogram — {dataset}')
         ax.legend(fontsize=8)
         _savefig(savepath, f'E2d_histogram_logscale={logscale}data={dataset}.pdf')
 
@@ -432,6 +453,47 @@ def plot_E2d_histogram_simple(X, X_catind, X_gauss, X_gaussdisc, X_copula,
         _savefig(savepath, f'E2d_histogram_simplemodels_data={dataset}logscale={logscale}.pdf')
 
 
+def plot_E2d_histogram_begvscopula(X, sim_dict_list_beg, X_copula,
+                                   dataset, savepath, colors, cfg):
+    r"""${\sf h}_{d_{\bf x}}$: BEG vs copula vs empirical.
+
+    Saved as: E2d_histogram_begvscopula_data={dataset}_logscale=_{True|False}.pdf
+    """
+    N = X.shape[0]
+    nbins = cfg.get('nbins_E2d', 60)
+    nbins_emp = cfg.get('nbins_emp', 20)
+    pvalue = cfg.get('mypvalue', 0.05)
+    alpha_emp = cfg.get('alpha_emp', 0.1)
+
+    E2d_X = np.sum((X - np.mean(X, axis=0)) ** 2, axis=1)
+    E2dmax = np.max(E2d_X) * 1.1
+    bins_E2d = np.arange(1e-2, E2dmax, E2dmax / nbins)
+
+    E2d_cop = np.sum((X_copula - np.mean(X_copula, axis=0)) ** 2, axis=1)
+
+    for logscale in [True, False]:
+        fig, ax = plt.subplots(figsize=(7, 5))
+        _emp_hist_with_errors(ax, E2d_X, nbins_emp, N, pvalue, alpha_emp,
+                              colors['emp'])
+        ax.hist(E2d_cop, histtype='step', bins=bins_E2d, label='Copula',
+                density=True, lw=1.75, color=colors['copula'])
+        for el in sim_dict_list_beg:
+            if condition(el):
+                ax.hist(el['distances_maxent'], histtype='step', bins=bins_E2d,
+                        label=model_label(el, 'BEG'), density=True,
+                        lw=1.75, color=colors['beg'], ls=_model_linestyle(el))
+                break
+        if logscale:
+            ax.set_yscale('log')
+        ax.set_xlabel(r'$d_{\bf x}^2 = \|{\bf x} - \boldsymbol{\mu}\|_2^2$',
+                      size=cfg.get('xlabel_fsize', 14))
+        ax.set_ylabel(r'${\sf h}_{d_{\bf x}}$', size=cfg.get('ylabel_fsize', 14))
+        ax.set_title(f'Euclidean distance — BEG vs Copula — {dataset}')
+        ax.legend(fontsize=8)
+        _savefig(savepath,
+                 f'E2d_histogram_begvscopula_data={dataset}_logscale=_{logscale}.pdf')
+
+
 # ---------------------------------------------------------------------------
 # Figure: Mahalanobis distance histograms
 # ---------------------------------------------------------------------------
@@ -440,7 +502,10 @@ def plot_mahalanobis_commonC_maxent(energies_X, sim_dict_list_ising,
                                     sim_dict_list_bc, sim_dict_list_beg,
                                     N, dataset, savepath, colors, cfg,
                                     energies_Xgauss=None):
-    r"""Mahalanobis distance (common $C$) histogram: maxent vs empirical."""
+    r"""Histogram ${\sf h}_{d_{\bf x}^{({\rm M})}}$ (Mahalanobis, common C): maxent vs empirical.
+
+    Saved as: energy_histogram_commonC_{dataset}_log={True|False}.pdf
+    """
     nbins = cfg.get('nbins_energy', 80)
     nbins_emp = cfg.get('nbins_emp', 20)
     pvalue = cfg.get('mypvalue', 0.05)
@@ -451,37 +516,63 @@ def plot_mahalanobis_commonC_maxent(energies_X, sim_dict_list_ising,
 
     for logscale in [True, False]:
         fig, ax = plt.subplots(figsize=(7, 5))
-        _emp_hist_with_errors(ax, energies_X, nbins_emp, N, pvalue, alpha_emp, colors['emp'])
+        _emp_hist_with_errors(ax, energies_X, nbins_emp, N, pvalue, alpha_emp,
+                              colors['emp'])
+        HB_maxent = None
         for simlist, col, name in [
             (sim_dict_list_ising, colors['ising'], 'Ising'),
-            (sim_dict_list_bc, colors['bc'], 'BC'),
-            (sim_dict_list_beg, colors['beg'], 'BEG'),
+            (sim_dict_list_bc,    colors['bc'],    'BC'),
+            (sim_dict_list_beg,   colors['beg'],   'BEG'),
         ]:
             for el in simlist:
                 if condition(el):
-                    ax.hist(el['energies_maxent_commonC'], histtype='step',
+                    HB_maxent = ax.hist(el['energies_maxent_commonC'], histtype='step',
                             bins=bins_energy, label=model_label(el, name),
                             density=True, lw=1.75, color=col,
                             ls=_model_linestyle(el))
                     break
+        assert HB_maxent is not None, "No model element satisfies condition — cannot compute y_min"
+        y_min = np.sort(HB_maxent[0][np.where(HB_maxent[0]>1.0E-12)[0]])[0]
+        ylim = ax.get_ylim()
+
         if energies_Xgauss is not None:
-            ax.hist(energies_Xgauss, histtype='step', bins=bins_energy,
-                    label='Gauss', density=True, lw=1.75,
-                    color=colors['gauss'], ls='--')
+            #ax.hist(energies_Xgauss, histtype='step', bins=bins_energy,
+            #        label='Gauss', density=True, lw=1.75,
+            #        color=colors['gauss'], ls='--')
+            
+            #####################
+            # gauss
+            HB_Xgauss = ax.hist(energies_Xgauss,hatch='//',histtype=u'step',bins=bins_energy,label='Gauss',density=True,lw=0.5,color=colors['gauss'],ls='-')
+            #HB_Xgauss = np.histogram(energies_Xgauss,bins=bins_energy,density=True)
+
+            M=sim_dict_list_ising[0]['configurations'].shape[1]
+            ax.plot(HB_Xgauss[1],energydensity_gauss(HB_Xgauss[1],M),ls='--',color=colors['gauss'],lw=2.,label='sum-chi')
+            #####################
+
+        
+        ax.set_ylim([np.max([ylim[0],y_min]),ylim[1]])
+
         if logscale:
             ax.set_yscale('log')
-        ax.set_xlabel(r'$d_{\bf x}^{({\rm M})} = \frac{1}{2}{\bf x}^\dag C^{-1}{\bf x}$',
-                      size=cfg.get('xlabel_fsize', 14))
+        ax.set_xlabel(
+            r'$d_{\bf x}^{({\rm M})} = \frac{1}{2}{\bf x}^\dag C^{-1}{\bf x}$',
+            size=cfg.get('xlabel_fsize', 14))
         ax.set_ylabel(r'${\sf h}_{d_{\bf x}^{({\rm M})}}$', size=cfg.get('ylabel_fsize', 14))
-        ax.set_title(f'Mahalanobis distance (common $C$) -- {dataset}')
+        ax.set_title(f'Mahalanobis distance (common $C$) — {dataset}')
         ax.legend(fontsize=8)
-        _savefig(savepath, f'energy_histogram_commonC_{dataset}_log={logscale}.pdf')
+        _savefig(savepath,
+                 f'energy_histogram_commonC_{dataset}_log={logscale}.pdf')
 
 
 def plot_mahalanobis_modelcov(energies_X, sim_dict_list_ising,
                               sim_dict_list_bc, sim_dict_list_beg,
-                              N, bins_energy, dataset, savepath, colors, cfg):
+                              N, M, bins_energy, dataset, savepath, colors, cfg):
     r"""Mahalanobis distance (model $\Sigma$) histogram."""
+    from scipy.special import gamma as _gamma
+
+    def _gauss_density(xs, d):
+        return xs ** (d / 2 - 1) * np.exp(-xs) / _gamma(d / 2)
+
     nbins_emp = cfg.get('nbins_emp', 20)
     pvalue = cfg.get('mypvalue', 0.05)
     alpha_emp = cfg.get('alpha_emp', 0.1)
@@ -501,6 +592,9 @@ def plot_mahalanobis_modelcov(energies_X, sim_dict_list_ising,
                             density=True, lw=1.75, color=col,
                             ls=_model_linestyle(el))
                     break
+        xs_th = np.linspace(max(bins_energy[0], 1e-6), bins_energy[-1], 300)
+        ax.plot(xs_th, _gauss_density(xs_th, M), ls='--',
+                color=colors['gauss'], lw=2., label='$\\chi^2$-theory')
         if logscale:
             ax.set_yscale('log')
         ax.set_xlabel(r'$d_{\bf x}^{({\rm M})} = \frac{1}{2}{\bf x}^\dag \Sigma^{-1}{\bf x}$',
@@ -511,15 +605,98 @@ def plot_mahalanobis_modelcov(energies_X, sim_dict_list_ising,
         _savefig(savepath, f'energy_histogram_{dataset}_log={logscale}.pdf')
 
 
+def plot_mahalanobis_commonC_simple(energies_X, energies_Xcatind,
+                                    energies_Xgauss, energies_Xgaussdisc,
+                                    energies_Xcopula, bins_energy,
+                                    N, M, dataset, savepath, colors, cfg):
+    r"""${\sf h}_{d_{\bf x}^{({\rm M})}}$ (common $C$): simple models vs empirical.
+
+    Saved as: energy_histogram_commonC_simplemodels_{dataset}_log={True|False}.pdf
+    """
+    from scipy.special import gamma as _gamma
+
+    def _gauss_density(xs, d):
+        return xs ** (d / 2 - 1) * np.exp(-xs) / _gamma(d / 2)
+
+    nbins_emp = cfg.get('nbins_emp', 20)
+    pvalue = cfg.get('mypvalue', 0.05)
+    alpha_emp = cfg.get('alpha_emp', 0.1)
+
+    simple = [
+        (energies_Xgauss,    colors['gauss'],     'Gauss',      '--'),
+        (energies_Xgaussdisc,colors['gaussdisc'], 'Gauss-disc', '-.'),
+        (energies_Xcopula,   colors['copula'],    'Copula',     '-'),
+        (energies_Xcatind,   colors['nullcat'],   'Cat-ind',    '-'),
+    ]
+
+    for logscale in [True, False]:
+        fig, ax = plt.subplots(figsize=(7, 5))
+        _emp_hist_with_errors(ax, energies_X, nbins_emp, N, pvalue, alpha_emp,
+                              colors['emp'])
+        for ens, col, lbl, ls in simple:
+            if ens is not None:
+                ax.hist(ens, histtype='step', bins=bins_energy,
+                        label=lbl, density=True, lw=1.75, color=col, ls=ls)
+        if logscale:
+            ax.set_yscale('log')
+        ax.set_xlabel(
+            r'$d_{\bf x}^{({\rm M})} = \frac{1}{2}{\bf x}^\dag C^{-1}{\bf x}$',
+            size=cfg.get('xlabel_fsize', 14))
+        ax.set_ylabel(r'${\sf h}_{d_{\bf x}^{({\rm M})}}$', size=cfg.get('ylabel_fsize', 14))
+        ax.set_title(f'Mahalanobis distance — simple models — {dataset}')
+        ax.legend(fontsize=8)
+        _savefig(savepath,
+                 f'energy_histogram_commonC_simplemodels_{dataset}_log={logscale}.pdf')
+
+
+def plot_mahalanobis_commonC_begvscopula(energies_X, sim_dict_list_beg,
+                                         energies_Xcopula, bins_energy,
+                                         N, dataset, savepath, colors, cfg):
+    r"""${\sf h}_{d_{\bf x}^{({\rm M})}}$ (common $C$): BEG vs copula vs empirical.
+
+    Saved as: energy_histogram_commonC_begvscopula_{dataset}_log={True|False}.pdf
+    """
+    nbins_emp = cfg.get('nbins_emp', 20)
+    pvalue = cfg.get('mypvalue', 0.05)
+    alpha_emp = cfg.get('alpha_emp', 0.1)
+
+    for logscale in [True, False]:
+        fig, ax = plt.subplots(figsize=(7, 5))
+        _emp_hist_with_errors(ax, energies_X, nbins_emp, N, pvalue, alpha_emp,
+                              colors['emp'])
+        ax.hist(energies_Xcopula, histtype='step', bins=bins_energy,
+                label='Copula', density=True, lw=1.75, color=colors['copula'])
+        for el in sim_dict_list_beg:
+            if condition(el):
+                ax.hist(el['energies_maxent_commonC'], histtype='step',
+                        bins=bins_energy, label=model_label(el, 'BEG'),
+                        density=True, lw=1.75, color=colors['beg'],
+                        ls=_model_linestyle(el))
+                break
+        if logscale:
+            ax.set_yscale('log')
+        ax.set_xlabel(
+            r'$d_{\bf x}^{({\rm M})} = \frac{1}{2}{\bf x}^\dag C^{-1}{\bf x}$',
+            size=cfg.get('xlabel_fsize', 14))
+        ax.set_ylabel(r'${\sf h}_{d_{\bf x}^{({\rm M})}}$', size=cfg.get('ylabel_fsize', 14))
+        ax.set_title(f'Mahalanobis distance — BEG vs Copula — {dataset}')
+        ax.legend(fontsize=8)
+        _savefig(savepath,
+                 f'energy_histogram_commonC_begvscopula_{dataset}_log={logscale}.pdf')
+
+
 # ---------------------------------------------------------------------------
 # Figure: principal-component histograms (maxent + Gaussian)
 # ---------------------------------------------------------------------------
 
 def plot_pc_histogram_maxent(X, sim_dict_list_ising, sim_dict_list_bc,
                              sim_dict_list_beg, U, mu_X, n_pcs,
-                             dataset, savepath, colors, cfg,
+                             dataset, savepath, colors, cfg,lambdas_gauss,
                              Xprime_gauss=None, zoom=False, pcs_toplot=None):
-    r"""Histograms ${\sf h}_{x'_k}$ of principal components: maxent vs empirical."""
+    r"""Histograms ${\sf h}_{x'_k}$ of principal components: maxent vs empirical.
+
+    Saved as: PCshistogram_comparison_data={dataset}.pdf  (or _zoom.pdf)
+    """
     N = X.shape[0]
     nbins = cfg.get('nbins_pc', 60)
     nbins_emp = cfg.get('nbins_emp', 20)
@@ -537,9 +714,10 @@ def plot_pc_histogram_maxent(X, sim_dict_list_ising, sim_dict_list_bc,
     Xprime = (X - mu_X) @ U.T
 
     fig, axs = plt.subplots(nrows, ncolumns,
-                            figsize=(figsize, int(0.75 * figsize * nrows / ncolumns)),
+                            figsize=(12, int(12 * nrows / 3.)),
                             sharey=True)
     fl = np.array(axs).flatten() if n_plot > 1 else [axs]
+
 
     for i, comp in enumerate(pcs_toplot):
         ax = fl[i]
@@ -556,8 +734,8 @@ def plot_pc_histogram_maxent(X, sim_dict_list_ising, sim_dict_list_bc,
         mybins = HB[1] if zoom else nbins
         for simlist, col, name in [
             (sim_dict_list_ising, colors['ising'], 'Ising'),
-            (sim_dict_list_bc, colors['bc'], 'BC'),
-            (sim_dict_list_beg, colors['beg'], 'BEG'),
+            (sim_dict_list_bc,    colors['bc'],    'BC'),
+            (sim_dict_list_beg,   colors['beg'],   'BEG'),
         ]:
             for el in simlist:
                 if condition(el):
@@ -568,20 +746,157 @@ def plot_pc_histogram_maxent(X, sim_dict_list_ising, sim_dict_list_bc,
 
         if Xprime_gauss is not None:
             lbl_g = 'Gauss' if i == n_plot - 1 else None
-            ax.hist(Xprime_gauss[:, comp], bins=mybins, histtype='step',
-                    density=True, color=colors['gauss'], lw=mylw,
-                    ls='--', label=lbl_g)
+            HB_pcgauss=ax.hist(Xprime_gauss[:, comp], bins=mybins, histtype='step',
+                    density=True, color=colors['gauss'], lw=0.7,hatch='\\',
+                    ls='-', label=lbl_g)
+
+            ax.plot(HB_pcgauss[1],normaldist.pdf(HB_pcgauss[1],loc=0,scale=lambdas_gauss[comp]**0.5),color=colors['gauss'],lw=2.,label='normal dist.',ls='--')
+
+
 
         ax.set_xlabel(r'$x^{\prime}_{' + str(comp + 1) + r'}$', size=11)
+
         ax.set_yscale('log')
     fl[n_plot - 1].legend(fontsize=7)
-    fig.suptitle(f'PC histograms -- {dataset}', size=cfg.get('suptitle_fsize', 16))
+    fig.suptitle(f'PC histograms — {dataset}', size=cfg.get('suptitle_fsize', 16))
     fig.supylabel(r"$\mathsf{h}_{x'_k}$", size=12)
     fig.tight_layout()
 
     fname = (f'PCshistogram_comparison_data={dataset}_zoom.pdf'
              if (zoom or pcs_toplot != list(range(n_pcs)))
              else f'PCshistogram_comparison_data={dataset}.pdf')
+    _savefig(savepath, fname)
+
+def plot_pc_histogram_simple(X, X_catind, X_gauss, X_gaussdisc, X_copula,
+                             U, mu_X, n_pcs, dataset, savepath, colors, cfg):
+    r"""Histograms ${\sf h}_{x'_k}$: simple models vs empirical.
+
+    Saved as: PCshistogram_comparison_simplemodels_data={dataset}.pdf
+    """
+    N = X.shape[0]
+    nbins = cfg.get('nbins_pc', 60)
+    nbins_emp = cfg.get('nbins_emp', 20)
+    pvalue = cfg.get('mypvalue', 0.05)
+    alpha_emp = cfg.get('alpha_emp', 0.1)
+
+    ncolumns = 3
+    nrows = int(n_pcs / ncolumns + 0.99)
+
+    Xprime = (X - mu_X) @ U.T
+
+    simple = [
+        (X_gauss,    colors['gauss'],    'Gauss',     '--'),
+        (X_gaussdisc,colors['gaussdisc'],'Gauss-disc', '-.'),
+        (X_copula,   colors['copula'],   'Copula',    '-'),
+        (X_catind,   colors['nullcat'],  'Cat-ind',   '-'),
+    ]
+
+    fig, axs = plt.subplots(nrows, ncolumns,
+                            figsize=(12, int(12 * nrows / 3.)),
+                            sharey=True)
+    fl = axs.flatten()
+
+    for comp in range(n_pcs):
+        ax = fl[comp]
+        HB = ax.hist(Xprime[:, comp], bins=nbins_emp, histtype='step',
+                     density=True, color=colors['emp'], lw=1.)
+        ax.hist(Xprime[:, comp], bins=nbins_emp, alpha=alpha_emp,
+                density=True, color=colors['emp'], lw=0.)
+        bl = HB[1][1:] - HB[1][:-1]
+        yerr = _wilson_error(HB[0], N, pvalue, bl)
+        ax.errorbar(0.5 * (HB[1][:-1] + HB[1][1:]), HB[0], yerr=yerr,
+                    color=colors['emp'], capsize=4., fmt='.', ls='',
+                    lw=0.85, ms=2.5, capthick=0.85)
+
+        for Xm, col, lbl, ls in simple:
+            if Xm is not None:
+                Xm_pc = (Xm - mu_X) @ U.T
+                show_lbl = lbl if comp == n_pcs - 1 else None
+                ax.hist(Xm_pc[:, comp], bins=nbins, histtype='step',
+                        density=True, color=col, lw=1.75, ls=ls, label=show_lbl)
+
+        ax.set_xlabel(r'$x^{\prime}_{' + str(comp + 1) + r'}$', size=11)
+
+        ax.set_yscale('log')
+    fl[n_pcs - 1].legend(fontsize=7)
+    fig.suptitle(f'PC histograms — simple models — {dataset}',
+                 size=cfg.get('suptitle_fsize', 16))
+    fig.supylabel(r"$\mathsf{h}_{x'_k}$", size=12)
+    fig.tight_layout()
+    _savefig(savepath,
+             f'PCshistogram_comparison_simplemodels_data={dataset}.pdf')
+
+def plot_factor_histogram_maxent(Xf, sim_dict_list_ising, sim_dict_list_bc,
+                                 sim_dict_list_beg, n_components,
+                                 dataset, savepath, colors, cfg, zoom=False,
+                                 factors_to_plot=None):
+    r"""Histograms ${\sf h}_{f_k}$ of factor scores: maxent vs empirical.
+
+    Requires that each sim_dict already has `el['Yf']` populated (via FactorAnalysis).
+    Saved as: factorhistogram_comparison_data={dataset}.pdf  (or _zoom.pdf)
+    """
+    N = Xf.shape[0]
+    nbins = cfg.get('nbins_pc', 60)
+    nbins_emp = cfg.get('nbins_emp', 20)
+    pvalue = cfg.get('mypvalue', 0.05)
+    alpha_emp = cfg.get('alpha_emp', 0.1)
+
+    if factors_to_plot is None:
+        factors_to_plot = list(range(n_components))
+    n_plot = len(factors_to_plot)
+    ncolumns = min(n_plot, 3)
+    nrows = int(n_plot / ncolumns + 0.99)
+    mylw = 2.5 if zoom else 1.75
+
+    fig, axs = plt.subplots(nrows, ncolumns,
+                            figsize=(12, int(12 * nrows / 3.)),
+                            sharey=True)
+    fl = np.array(axs).flatten() if n_plot > 1 else [axs]
+
+    for i, comp in enumerate(factors_to_plot):
+        ax = fl[i]
+        HB = ax.hist(Xf[:, comp], bins=nbins_emp, histtype='step',
+                     density=True, color=colors['emp'], lw=1.)
+        ax.hist(Xf[:, comp], bins=nbins_emp, alpha=alpha_emp,
+                density=True, color=colors['emp'], lw=0.)
+        bl = HB[1][1:] - HB[1][:-1]
+        yerr = _wilson_error(HB[0], N, pvalue, bl)
+        ax.errorbar(0.5 * (HB[1][:-1] + HB[1][1:]), HB[0], yerr=yerr,
+                    color=colors['emp'], capsize=4., fmt='.', ls='',
+                    lw=0.85, ms=2.5, capthick=0.85)
+
+        mybins = HB[1] if zoom else nbins
+        for simlist, col, name in [
+            (sim_dict_list_ising, colors['ising'], 'Ising'),
+            (sim_dict_list_bc,    colors['bc'],    'BC'),
+            (sim_dict_list_beg,   colors['beg'],   'BEG'),
+        ]:
+            for el in simlist:
+                if condition(el) and 'Yf' in el:
+                    lbl = model_label(el, name) if i == n_plot - 1 else None
+                    ax.hist(el['Yf'][:, comp], bins=mybins, histtype='step',
+                            density=True, color=col, lw=mylw, label=lbl)
+                    break
+
+        from scipy.stats import norm as _norm
+        xs_th = np.linspace(HB[1][0], HB[1][-1], 300)
+        lbl_norm = 'Normal' if i == n_plot - 1 else None
+        ax.plot(xs_th, _norm.pdf(xs_th), ls='--',
+                color=colors['gauss'], lw=2., label=lbl_norm)
+
+        ax.set_xlabel(r'$f_{' + str(comp + 1) + r'}$', size=11)
+
+        ax.set_yscale('log')
+        if zoom:
+            ylim = ax.get_ylim()
+            ax.set_ylim([3e-2, ylim[1]])
+    fl[n_plot - 1].legend(fontsize=7)
+    fig.suptitle(f'Factor histograms — {dataset}', size=cfg.get('suptitle_fsize', 16))
+    fig.supylabel(r"$\mathsf{h}_{f_k}$", size=12)
+    fig.tight_layout()
+
+    fname = (f'factorhistogram_comparison_data={dataset}_zoom.pdf'
+             if zoom else f'factorhistogram_comparison_data={dataset}.pdf')
     _savefig(savepath, fname)
 
 
@@ -629,17 +944,20 @@ def plot_correlation_time_analysis(sim_dict_list_ising, sim_dict_list_bc,
         _, taus_bc[k], tauerrs_bc[k], _ = JKerror(Ypc_bc[:, k], bslist, alpha=0.95)
         _, taus_beg[k], tauerrs_beg[k], _ = JKerror(Ypc_beg[:, k], bslist, alpha=0.95)
 
-    _acf_kw = dict(adjusted=False, nlags=nlags, qstat=False,
-                   fft=True, alpha=None, bartlett_confint=True, missing='none')
-
     acf_ising = np.zeros((nlags + 1, n_pcs_acf))
     acf_bc = np.zeros((nlags + 1, n_pcs_acf))
     acf_beg = np.zeros((nlags + 1, n_pcs_acf))
 
     for k in range(n_pcs_acf):
-        acf_ising[:, k] = _acf(Ypc_ising[:, k], **_acf_kw)
-        acf_bc[:, k] = _acf(Ypc_bc[:, k], **_acf_kw)
-        acf_beg[:, k] = _acf(Ypc_beg[:, k], **_acf_kw)
+        acf_ising[:, k] = _acf(Ypc_ising[:, k], adjusted=False, nlags=nlags,
+                                qstat=False, fft=True, alpha=None,
+                                bartlett_confint=True, missing='none')
+        acf_bc[:, k] = _acf(Ypc_bc[:, k], adjusted=False, nlags=nlags,
+                             qstat=False, fft=True, alpha=None,
+                             bartlett_confint=True, missing='none')
+        acf_beg[:, k] = _acf(Ypc_beg[:, k], adjusted=False, nlags=nlags,
+                              qstat=False, fft=True, alpha=None,
+                              bartlett_confint=True, missing='none')
 
     tempi = list(range(nlags + 1))
     ymin, ymax = -0.02, 1.02

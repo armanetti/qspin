@@ -13,14 +13,118 @@ needed for the maximum-likelihood gradient:
 Optimization uses the Adam optimizer (:class:`Adam`).  Chains can be
 periodically reset to random empirical configurations (Algorithm 2,
 parameter ``tau_c``) to combat slow mixing.
+
+Parallelisation
+---------------
+When ``n_workers > 1`` a :class:`~concurrent.futures.ProcessPoolExecutor` is used
+to run multiple chains simultaneously across real OS processes, bypassing the GIL.
+The pool is created once per ``naif_fit_euler`` call and reused across all gradient
+iterations to avoid subprocess-spawn overhead.
+
+On Linux and macOS the ``fork`` start method is used automatically, so no special
+guard is needed in the calling script or notebook.  On Windows, ``spawn`` is the
+only available method; scripts (not notebooks) must protect the entry point with
+``if __name__ == '__main__':``.
 """
 
+import multiprocessing
+import sys
 import numpy as np
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
+from .gauge import possible_states
 from .mcmc import gibbssampling_ising, gibbssampling_BC, gibbssampling_beg
 
+# Use 'fork' on Unix (Linux + macOS) so worker processes inherit memory without
+# re-importing the calling script — no 'if __name__ == "__main__"' guard needed.
+# On Windows 'fork' is unavailable; fall back to 'spawn'.
+_MP_CONTEXT = multiprocessing.get_context(
+    'fork' if sys.platform != 'win32' else 'spawn'
+)
+
+
+# ---------------------------------------------------------------------------
+# Module-level observable helpers 
+# ---------------------------------------------------------------------------
+
+def _obs_x(x):
+    return x.copy()
+
+
+def _obs_xxdag(x):
+    return np.outer(x, x)
+
+
+def _obs_x2x2dag(x):
+    return np.outer(x ** 2, x ** 2)
+
+
+# ---------------------------------------------------------------------------
+# Module-level chain runners  (must be top-level for pickle)
+# Each function takes a single tuple of arguments so executor.map works.
+# ---------------------------------------------------------------------------
+
+def _run_chain_ising(args):
+    """Run one persistent chain for the Ising model."""
+    Q, sigmas_n, J, h, tau_PCD = args
+    sigmas, _, dict_obs, *_ = gibbssampling_ising(
+        Q, sigmas_n, J, h, 1., tau_PCD,
+        energies_test=False,
+        observables_list=[_obs_x, _obs_xxdag],
+        observables_names=['x', 'xxdag'],
+    )
+    return sigmas, dict_obs
+
+
+def _thermalize_chain_ising(args):
+    """Thermalize one chain for the Ising model."""
+    Q, sigmas0, J0, h0, tau_therm = args
+    sigmas_n, *_ = gibbssampling_ising(Q, sigmas0, J0, h0, 1., tau_therm)
+    return sigmas_n
+
+
+def _run_chain_BC(args):
+    """Run one persistent chain for the Blume-Capel model."""
+    Q, sigmas_n, J, h, tau_PCD = args
+    sigmas, _, dict_obs, *_ = gibbssampling_BC(
+        Q, sigmas_n, J, h, 1., tau_PCD,
+        energies_test=False,
+        observables_list=[_obs_x, _obs_xxdag],
+        observables_names=['x', 'xxdag'],
+    )
+    return sigmas, dict_obs
+
+
+def _thermalize_chain_BC(args):
+    """Thermalize one chain for the Blume-Capel model."""
+    Q, sigmas0, J0, h0, tau_therm = args
+    sigmas_n, *_ = gibbssampling_BC(Q, sigmas0, J0, h0, 1., tau_therm)
+    return sigmas_n
+
+
+def _run_chain_BEG(args):
+    """Run one persistent chain for the BEG model."""
+    Q, sigmas_n, J, h, K, tau_PCD = args
+    sigmas, _, dict_obs, *_ = gibbssampling_beg(
+        Q, sigmas_n, J, h, K, 1., tau_PCD,
+        energies_test=False,
+        observables_list=[_obs_x, _obs_xxdag, _obs_x2x2dag],
+        observables_names=['x', 'xxdag', 'x2x2dag'],
+    )
+    return sigmas, dict_obs
+
+
+def _thermalize_chain_BEG(args):
+    """Thermalize one chain for the BEG model."""
+    Q, sigmas0, J0, h0, K0, tau_therm = args
+    sigmas_n, *_ = gibbssampling_beg(Q, sigmas0, J0, h0, K0, 1., tau_therm)
+    return sigmas_n
+
+
+# ---------------------------------------------------------------------------
+# Adam optimizer
+# ---------------------------------------------------------------------------
 
 class Adam:
     """Minimal Adam optimizer (Kingma & Ba, 2014).
@@ -69,18 +173,7 @@ class generalizedIsing_inferencePCD:
     def __init__(self, Q=3, l2_lambda=0.01):
         self.Q = Q
         self.l2_lambda = l2_lambda
-        if Q % 2 == 1:
-            self.states = np.arange(1, Q + 1)
-            self.states = self.states - np.mean(self.states)
-        else:
-            self.states = np.arange(1, Q + 1)
-            self.states = 2 * (self.states - np.mean(self.states))
-
-    def _x(self, x):
-        return x.copy()
-
-    def _xxdag(self, x):
-        return np.outer(x, x)
+        self.states = possible_states(Q)
 
     def _unpack_params(self, theta, n_nodes):
         h = theta[:n_nodes]
@@ -91,37 +184,26 @@ class generalizedIsing_inferencePCD:
         J = J + J.T
         return J, h
 
-    def _run_one_chain_ising(self, n, J, h):
-        sigmas, _, dict_obs, *_ = gibbssampling_ising(
-            self.Q, np.copy(self.sigmas[n]), -J, -h, 1., self.tau_PCD,
-            energies_test=False,
-            observables_list=[self._x, self._xxdag],
-            observables_names=['x', 'xxdag']
-        )
-        return n, sigmas, dict_obs
-
     def _objective(self, theta, X):
         n_samples, n_nodes = X.shape
         J, h = self._unpack_params(theta, n_nodes)
 
-        theoretical_mean = np.zeros((n_nodes))
+        theoretical_mean = np.zeros(n_nodes)
         theoretical_xxdag = np.zeros((n_nodes, n_nodes))
 
-        if self.nworkers > 1:
-            with ThreadPoolExecutor(max_workers=self.nworkers) as executor:
-                futures = [executor.submit(self._run_one_chain_ising, n, J, h)
-                           for n in range(self.ncopies)]
-                results = [f.result() for f in futures]
-            for n, sigmas, dict_obs in results:
-                self.sigmas[n] = np.copy(sigmas)
-                theoretical_mean += np.mean(dict_obs['x'], axis=0)
-                theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
+        args_list = [
+            (self.Q, np.copy(self.sigmas[n]), J, h, self.tau_PCD)
+            for n in range(self.ncopies)
+        ]
+        if self._pool is not None:
+            results = list(self._pool.map(_run_chain_ising, args_list))
         else:
-            for n in range(self.ncopies):
-                n, sigmas, dict_obs = self._run_one_chain_ising(n, J, h)
-                self.sigmas[n] = np.copy(sigmas)
-                theoretical_mean += np.mean(dict_obs['x'], axis=0)
-                theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
+            results = [_run_chain_ising(a) for a in args_list]
+
+        for n, (sigmas, dict_obs) in enumerate(results):
+            self.sigmas[n] = sigmas
+            theoretical_mean += np.mean(dict_obs['x'], axis=0)
+            theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
 
         theoretical_mean /= self.ncopies
         theoretical_xxdag /= self.ncopies
@@ -140,10 +222,6 @@ class generalizedIsing_inferencePCD:
         self.theoretical_xxdag = theoretical_xxdag
         self.theoretical_mean = theoretical_mean
         return loss, np.concatenate([grad_h, grad_J_flat])
-
-    def _thermalize_one_ising(self, n, sigmas0, J0, h0, tau_therm):
-        sigmas_n, *_ = gibbssampling_ising(self.Q, np.copy(sigmas0), -J0, -h0, 1., tau_therm)
-        return n, sigmas_n
 
     def naif_fit_euler(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
                        tau_PCD=20, tau_therm=100, tau_c=None,
@@ -177,10 +255,13 @@ class generalizedIsing_inferencePCD:
         verbose : bool
             Print per-iteration loss / log-likelihood.
         n_workers : int
-            Thread pool size for chain updates.
+            Number of parallel worker processes for chain updates.
+            Use 1 (default) for sequential execution.  Values > 1 spawn
+            real OS processes via :class:`ProcessPoolExecutor`, bypassing
+            the GIL.  On Windows the calling script must be
+            protected with ``if __name__ == '__main__':``.
         """
         self.tau_PCD = tau_PCD
-        self.nworkers = n_workers
         myadam = Adam(lr=learning_rate)
 
         n_samples, n_nodes = X.shape
@@ -203,51 +284,56 @@ class generalizedIsing_inferencePCD:
                 pass
             case _:
                 J0 = np.zeros((n_nodes, n_nodes))
-                h0 = np.zeros((n_nodes))
+                h0 = np.zeros(n_nodes)
 
         assert J0 is not None and h0 is not None
         theta[:n_nodes] = h0
         tri_indices = np.triu_indices(n_nodes, k=1)
         theta[n_nodes:] = J0[tri_indices]
 
-        # initial thermalization of the persistent chains
+        # Build initial thermalization args
         therm_args = []
         for n in range(self.ncopies):
             if iicc_configurations == 'emp':
                 index_sub = np.random.choice(range(n_samples))
                 sigmas0_n = np.copy(X[index_sub])
             else:
-                sigmas0_n = np.random.choice(self.states, size=(n_nodes))
-            therm_args.append((n, sigmas0_n))
+                sigmas0_n = np.random.choice(self.states, size=n_nodes)
+            therm_args.append((self.Q, sigmas0_n, J0, h0, tau_therm))
 
-        if n_workers > 1:
-            with ThreadPoolExecutor(max_workers=n_workers) as executor:
-                futures = [executor.submit(self._thermalize_one_ising, n, s0, J0, h0, tau_therm)
-                           for n, s0 in therm_args]
-                for f in futures:
-                    n, sigmas_n = f.result()
-                    self.sigmas[n] = sigmas_n
-        else:
-            for n, s0 in therm_args:
-                _, sigmas_n = self._thermalize_one_ising(n, s0, J0, h0, tau_therm)
+        # Create persistent worker pool (once for all iterations)
+        self._pool = ProcessPoolExecutor(max_workers=n_workers, mp_context=_MP_CONTEXT) if n_workers > 1 else None
+
+        try:
+            # Initial thermalization
+            if self._pool is not None:
+                therm_results = list(self._pool.map(_thermalize_chain_ising, therm_args))
+            else:
+                therm_results = [_thermalize_chain_ising(a) for a in therm_args]
+            for n, sigmas_n in enumerate(therm_results):
                 self.sigmas[n] = sigmas_n
 
-        self.losses = np.zeros((niterations, 3))
+            self.losses = np.zeros((niterations, 3))
 
-        for n in tqdm(range(niterations)):
-            if tau_c is not None and n % tau_c == 0:
-                for k in range(self.ncopies):
-                    idx = np.random.choice(n_samples)
-                    self.sigmas[k] = np.copy(X[idx])
+            for n in tqdm(range(niterations)):
+                if tau_c is not None and n % tau_c == 0:
+                    for k in range(self.ncopies):
+                        idx = np.random.choice(n_samples)
+                        self.sigmas[k] = np.copy(X[idx])
 
-            loss, grad = self._objective(theta, X)
-            theta = myadam.update(theta, grad)
+                loss, grad = self._objective(theta, X)
+                theta = myadam.update(theta, grad)
 
-            self.J_fit, self.h_fit = self._unpack_params(theta, n_nodes)
-            loglik = self.loglikelihood(X) / n_samples
-            self.losses[n] = [loglik, self.lossh, self.lossJ]
-            if verbose:
-                print(n, loss, loglik)
+                self.J_fit, self.h_fit = self._unpack_params(theta, n_nodes)
+                loglik = self.loglikelihood(X) / n_samples
+                self.losses[n] = [loglik, self.lossh, self.lossJ]
+                if verbose:
+                    print(n, loss, loglik)
+
+        finally:
+            if self._pool is not None:
+                self._pool.shutdown(wait=True)
+                self._pool = None
 
         return self.J_fit, self.h_fit
 
@@ -289,18 +375,7 @@ class generalizedBC_inferencePCD:
     def __init__(self, Q=3, l2_lambda=0.01):
         self.Q = Q
         self.l2_lambda = l2_lambda
-        if Q % 2 == 1:
-            self.states = np.arange(1, Q + 1)
-            self.states = self.states - np.mean(self.states)
-        else:
-            self.states = np.arange(1, Q + 1)
-            self.states = 2 * (self.states - np.mean(self.states))
-
-    def _x(self, x):
-        return x.copy()
-
-    def _xxdag(self, x):
-        return np.outer(x, x)
+        self.states = possible_states(Q)
 
     def _unpack_params(self, theta, n_nodes):
         h = theta[:n_nodes]
@@ -313,37 +388,26 @@ class generalizedBC_inferencePCD:
         J[diag_indices] = 0.5 * J[diag_indices]
         return J, h
 
-    def _run_one_chain_BC(self, n, J, h):
-        sigmas, _, dict_obs, *_ = gibbssampling_BC(
-            self.Q, np.copy(self.sigmas[n]), -J, -h, 1., self.tau_PCD,
-            energies_test=False,
-            observables_list=[self._x, self._xxdag],
-            observables_names=['x', 'xxdag']
-        )
-        return n, sigmas, dict_obs
-
     def _objective(self, theta, X):
         n_samples, n_nodes = X.shape
         J, h = self._unpack_params(theta, n_nodes)
 
-        theoretical_mean = np.zeros((n_nodes))
+        theoretical_mean = np.zeros(n_nodes)
         theoretical_xxdag = np.zeros((n_nodes, n_nodes))
 
-        if self.nworkers > 1:
-            with ThreadPoolExecutor(max_workers=self.nworkers) as executor:
-                futures = [executor.submit(self._run_one_chain_BC, n, J, h)
-                           for n in range(self.ncopies)]
-                results = [f.result() for f in futures]
-            for n, sigmas, dict_obs in results:
-                self.sigmas[n] = np.copy(sigmas)
-                theoretical_mean += np.mean(dict_obs['x'], axis=0)
-                theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
+        args_list = [
+            (self.Q, np.copy(self.sigmas[n]), J, h, self.tau_PCD)
+            for n in range(self.ncopies)
+        ]
+        if self._pool is not None:
+            results = list(self._pool.map(_run_chain_BC, args_list))
         else:
-            for n in range(self.ncopies):
-                n, sigmas, dict_obs = self._run_one_chain_BC(n, J, h)
-                self.sigmas[n] = np.copy(sigmas)
-                theoretical_mean += np.mean(dict_obs['x'], axis=0)
-                theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
+            results = [_run_chain_BC(a) for a in args_list]
+
+        for n, (sigmas, dict_obs) in enumerate(results):
+            self.sigmas[n] = sigmas
+            theoretical_mean += np.mean(dict_obs['x'], axis=0)
+            theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
 
         theoretical_mean /= self.ncopies
         theoretical_xxdag /= self.ncopies
@@ -365,17 +429,12 @@ class generalizedBC_inferencePCD:
         self.theoretical_mean = theoretical_mean
         return loss, np.concatenate([grad_h, grad_J_flat])
 
-    def _thermalize_one_BC(self, n, sigmas0, J0, h0, tau_therm):
-        sigmas_n, *_ = gibbssampling_BC(self.Q, np.copy(sigmas0), -J0, -h0, 1., tau_therm)
-        return n, sigmas_n
-
     def naif_fit_euler(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
                        tau_PCD=20, tau_therm=100, tau_c=None,
                        iicc='meanfield', iicc_configurations='emp',
                        J0=None, h0=None, verbose=False, n_workers=1):
         """Fit (J, h) by Adam-driven PCD.  See :meth:`generalizedIsing_inferencePCD.naif_fit_euler`."""
         self.tau_PCD = tau_PCD
-        self.nworkers = n_workers
         myadam = Adam(lr=learning_rate)
 
         n_samples, n_nodes = X.shape
@@ -397,7 +456,7 @@ class generalizedBC_inferencePCD:
                 pass
             case _:
                 J0 = np.zeros((n_nodes, n_nodes))
-                h0 = np.zeros((n_nodes))
+                h0 = np.zeros(n_nodes)
 
         assert J0 is not None and h0 is not None
         theta[:n_nodes] = h0
@@ -410,37 +469,40 @@ class generalizedBC_inferencePCD:
                 index_sub = np.random.choice(range(n_samples))
                 sigmas0_n = np.copy(X[index_sub])
             else:
-                sigmas0_n = np.random.choice(self.states, size=(n_nodes))
-            therm_args.append((n, sigmas0_n))
+                sigmas0_n = np.random.choice(self.states, size=n_nodes)
+            therm_args.append((self.Q, sigmas0_n, J0, h0, tau_therm))
 
-        if n_workers > 1:
-            with ThreadPoolExecutor(max_workers=n_workers) as executor:
-                futures = [executor.submit(self._thermalize_one_BC, n, s0, J0, h0, tau_therm)
-                           for n, s0 in therm_args]
-                for f in futures:
-                    n, sigmas_n = f.result()
-                    self.sigmas[n] = sigmas_n
-        else:
-            for n, s0 in therm_args:
-                _, sigmas_n = self._thermalize_one_BC(n, s0, J0, h0, tau_therm)
+        self._pool = ProcessPoolExecutor(max_workers=n_workers, mp_context=_MP_CONTEXT) if n_workers > 1 else None
+
+        try:
+            if self._pool is not None:
+                therm_results = list(self._pool.map(_thermalize_chain_BC, therm_args))
+            else:
+                therm_results = [_thermalize_chain_BC(a) for a in therm_args]
+            for n, sigmas_n in enumerate(therm_results):
                 self.sigmas[n] = sigmas_n
 
-        self.losses = np.zeros((niterations, 3))
+            self.losses = np.zeros((niterations, 3))
 
-        for n in tqdm(range(niterations)):
-            if tau_c is not None and n % tau_c == 0:
-                for k in range(self.ncopies):
-                    idx = np.random.choice(n_samples)
-                    self.sigmas[k] = np.copy(X[idx])
+            for n in tqdm(range(niterations)):
+                if tau_c is not None and n % tau_c == 0:
+                    for k in range(self.ncopies):
+                        idx = np.random.choice(n_samples)
+                        self.sigmas[k] = np.copy(X[idx])
 
-            loss, grad = self._objective(theta, X)
-            theta = myadam.update(theta, grad)
+                loss, grad = self._objective(theta, X)
+                theta = myadam.update(theta, grad)
 
-            self.J_fit, self.h_fit = self._unpack_params(theta, n_nodes)
-            loglik = self.loglikelihood(X) / n_samples
-            self.losses[n] = [loglik, self.lossh, self.lossJ]
-            if verbose:
-                print(n, loss, loglik)
+                self.J_fit, self.h_fit = self._unpack_params(theta, n_nodes)
+                loglik = self.loglikelihood(X) / n_samples
+                self.losses[n] = [loglik, self.lossh, self.lossJ]
+                if verbose:
+                    print(n, loss, loglik)
+
+        finally:
+            if self._pool is not None:
+                self._pool.shutdown(wait=True)
+                self._pool = None
 
         return self.J_fit, self.h_fit
 
@@ -493,21 +555,7 @@ class generalizedBEG_inferencePCD:
     def __init__(self, Q=3, l2_lambda=0.01):
         self.Q = Q
         self.l2_lambda = l2_lambda
-        if Q % 2 == 1:
-            self.states = np.arange(1, Q + 1)
-            self.states = self.states - np.mean(self.states)
-        else:
-            self.states = np.arange(1, Q + 1)
-            self.states = 2 * (self.states - np.mean(self.states))
-
-    def _x(self, x):
-        return x.copy()
-
-    def _xxdag(self, x):
-        return np.outer(x, x)
-
-    def _x2x2dag(self, x):
-        return np.outer(x ** 2, x ** 2)
+        self.states = possible_states(Q)
 
     def _unpack_params(self, theta, n_nodes):
         tridiag_indices = np.triu_indices(n_nodes, k=0)
@@ -528,40 +576,28 @@ class generalizedBEG_inferencePCD:
         K = K + K.T
         return J, h, K
 
-    def _run_one_chain_BEG(self, n, J, h, K):
-        sigmas, _, dict_obs, *_ = gibbssampling_beg(
-            self.Q, np.copy(self.sigmas[n]), -J, -h, -K, 1., self.tau_PCD,
-            energies_test=False,
-            observables_list=[self._x, self._xxdag, self._x2x2dag],
-            observables_names=['x', 'xxdag', 'x2x2dag']
-        )
-        return n, sigmas, dict_obs
-
     def _objective(self, theta, X):
         n_samples, n_nodes = X.shape
         J, h, K = self._unpack_params(theta, n_nodes)
 
-        theoretical_mean = np.zeros((n_nodes))
+        theoretical_mean = np.zeros(n_nodes)
         theoretical_xxdag = np.zeros((n_nodes, n_nodes))
         theoretical_x2x2dag = np.zeros((n_nodes, n_nodes))
 
-        if self.nworkers > 1:
-            with ThreadPoolExecutor(max_workers=self.nworkers) as executor:
-                futures = [executor.submit(self._run_one_chain_BEG, n, J, h, K)
-                           for n in range(self.ncopies)]
-                results = [f.result() for f in futures]
-            for n, sigmas, dict_obs in results:
-                self.sigmas[n] = np.copy(sigmas)
-                theoretical_mean += np.mean(dict_obs['x'], axis=0)
-                theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
-                theoretical_x2x2dag += np.mean(dict_obs['x2x2dag'], axis=0)
+        args_list = [
+            (self.Q, np.copy(self.sigmas[n]), J, h, K, self.tau_PCD)
+            for n in range(self.ncopies)
+        ]
+        if self._pool is not None:
+            results = list(self._pool.map(_run_chain_BEG, args_list))
         else:
-            for n in range(self.ncopies):
-                n, sigmas, dict_obs = self._run_one_chain_BEG(n, J, h, K)
-                self.sigmas[n] = np.copy(sigmas)
-                theoretical_mean += np.mean(dict_obs['x'], axis=0)
-                theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
-                theoretical_x2x2dag += np.mean(dict_obs['x2x2dag'], axis=0)
+            results = [_run_chain_BEG(a) for a in args_list]
+
+        for n, (sigmas, dict_obs) in enumerate(results):
+            self.sigmas[n] = sigmas
+            theoretical_mean += np.mean(dict_obs['x'], axis=0)
+            theoretical_xxdag += np.mean(dict_obs['xxdag'], axis=0)
+            theoretical_x2x2dag += np.mean(dict_obs['x2x2dag'], axis=0)
 
         theoretical_mean /= self.ncopies
         theoretical_xxdag /= self.ncopies
@@ -589,17 +625,12 @@ class generalizedBEG_inferencePCD:
         self.theoretical_x2x2dag = theoretical_x2x2dag
         return loss, np.concatenate([grad_h, grad_J_flat, grad_K_flat])
 
-    def _thermalize_one_BEG(self, n, sigmas0, J0, h0, K0, tau_therm):
-        sigmas_n, *_ = gibbssampling_beg(self.Q, np.copy(sigmas0), -J0, -h0, -K0, 1., tau_therm)
-        return n, sigmas_n
-
     def naif_fit_euler(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
                        tau_PCD=20, tau_therm=100, tau_c=None,
                        iicc='meanfield', iicc_configurations='emp',
                        J0=None, h0=None, K0=None, verbose=False, n_workers=1):
         """Fit (J, h, K) by Adam-driven PCD."""
         self.tau_PCD = tau_PCD
-        self.nworkers = n_workers
         myadam = Adam(lr=learning_rate)
 
         n_samples, n_nodes = X.shape
@@ -624,7 +655,7 @@ class generalizedBEG_inferencePCD:
                 pass
             case _:
                 J0 = np.zeros((n_nodes, n_nodes))
-                h0 = np.zeros((n_nodes))
+                h0 = np.zeros(n_nodes)
                 K0 = np.zeros((n_nodes, n_nodes))
 
         assert J0 is not None and h0 is not None and K0 is not None
@@ -640,37 +671,40 @@ class generalizedBEG_inferencePCD:
                 index_sub = np.random.choice(range(n_samples))
                 sigmas0_n = np.copy(X[index_sub])
             else:
-                sigmas0_n = np.random.choice(self.states, size=(n_nodes))
-            therm_args.append((n, sigmas0_n))
+                sigmas0_n = np.random.choice(self.states, size=n_nodes)
+            therm_args.append((self.Q, sigmas0_n, J0, h0, K0, tau_therm))
 
-        if n_workers > 1:
-            with ThreadPoolExecutor(max_workers=n_workers) as executor:
-                futures = [executor.submit(self._thermalize_one_BEG, n, s0, J0, h0, K0, tau_therm)
-                           for n, s0 in therm_args]
-                for f in futures:
-                    n, sigmas_n = f.result()
-                    self.sigmas[n] = sigmas_n
-        else:
-            for n, s0 in therm_args:
-                _, sigmas_n = self._thermalize_one_BEG(n, s0, J0, h0, K0, tau_therm)
+        self._pool = ProcessPoolExecutor(max_workers=n_workers, mp_context=_MP_CONTEXT) if n_workers > 1 else None
+
+        try:
+            if self._pool is not None:
+                therm_results = list(self._pool.map(_thermalize_chain_BEG, therm_args))
+            else:
+                therm_results = [_thermalize_chain_BEG(a) for a in therm_args]
+            for n, sigmas_n in enumerate(therm_results):
                 self.sigmas[n] = sigmas_n
 
-        self.losses = np.zeros((niterations, 4))
+            self.losses = np.zeros((niterations, 4))
 
-        for n in tqdm(range(niterations)):
-            if tau_c is not None and n % tau_c == 0:
-                for k in range(self.ncopies):
-                    idx = np.random.choice(n_samples)
-                    self.sigmas[k] = np.copy(X[idx])
+            for n in tqdm(range(niterations)):
+                if tau_c is not None and n % tau_c == 0:
+                    for k in range(self.ncopies):
+                        idx = np.random.choice(n_samples)
+                        self.sigmas[k] = np.copy(X[idx])
 
-            loss, grad = self._objective(theta, X)
-            theta = myadam.update(theta, grad)
+                loss, grad = self._objective(theta, X)
+                theta = myadam.update(theta, grad)
 
-            self.J_fit, self.h_fit, self.K_fit = self._unpack_params(theta, n_nodes)
-            loglik = self.loglikelihood(X) / n_samples
-            self.losses[n] = [loglik, self.lossh, self.lossJ, self.lossK]
-            if verbose:
-                print(n, loss, loglik)
+                self.J_fit, self.h_fit, self.K_fit = self._unpack_params(theta, n_nodes)
+                loglik = self.loglikelihood(X) / n_samples
+                self.losses[n] = [loglik, self.lossh, self.lossJ, self.lossK]
+                if verbose:
+                    print(n, loss, loglik)
+
+        finally:
+            if self._pool is not None:
+                self._pool.shutdown(wait=True)
+                self._pool = None
 
         return self.J_fit, self.h_fit, self.K_fit
 

@@ -21,6 +21,8 @@ import numpy as np
 from scipy.optimize import minimize
 from tqdm import tqdm
 
+from .gauge import possible_states
+
 
 class generalizedIsing_inference:
     """Pseudo-likelihood inference for the gauge-fixed generalized Ising model.
@@ -36,12 +38,7 @@ class generalizedIsing_inference:
     def __init__(self, Q=3, l2_lambda=0.01):
         self.Q = Q
         self.l2_lambda = l2_lambda
-        if Q % 2 == 1:
-            self.states = np.arange(1, Q + 1)
-            self.states = self.states - np.mean(self.states)
-        else:
-            self.states = np.arange(1, Q + 1)
-            self.states = 2 * (self.states - np.mean(self.states))
+        self.states = possible_states(Q)
 
     def _unpack_params(self, theta, n_nodes):
         h = theta[:n_nodes]
@@ -74,8 +71,8 @@ class generalizedIsing_inference:
         diff = X - expected_x
         grad_h = -(np.sum(diff, axis=0) - self.l2_lambda * h)
 
-        grad_J_full = -((X.T @ diff) - self.l2_lambda * J)
-        grad_J_sym = grad_J_full + grad_J_full.T
+        data_J = X.T @ diff
+        grad_J_sym = -(data_J + data_J.T - self.l2_lambda * J)
         tri_indices = np.triu_indices(n_nodes, k=1)
         grad_J_flat = grad_J_sym[tri_indices]
 
@@ -213,12 +210,7 @@ class generalizedBC_inference:
     def __init__(self, Q=3, l2_lambda=0.01):
         self.Q = Q
         self.l2_lambda = l2_lambda
-        if Q % 2 == 1:
-            self.states = np.arange(1, Q + 1)
-            self.states = self.states - np.mean(self.states)
-        else:
-            self.states = np.arange(1, Q + 1)
-            self.states = 2 * (self.states - np.mean(self.states))
+        self.states = possible_states(Q)
 
     def _unpack_params(self, theta, n_nodes):
         h = theta[:n_nodes]
@@ -254,12 +246,12 @@ class generalizedBC_inference:
         diff = X - expected_x
         grad_h = -(np.sum(diff, axis=0) - self.l2_lambda * h)
 
-        grad_J_full = -((X.T @ diff) - self.l2_lambda * J)
-        grad_J_sym = grad_J_full + grad_J_full.T
+        data_J = X.T @ diff
+        grad_J_sym = -(data_J + data_J.T - self.l2_lambda * J)
 
         expected_x2 = np.sum(probs * self.states ** 2, axis=2)
         diff_x2 = X ** 2 - expected_x2
-        grad_J_diag = -(0.5 * np.sum(diff_x2, axis=0) - self.l2_lambda * np.diag(J))
+        grad_J_diag = -(0.5 * np.sum(diff_x2, axis=0) - 0.5 * self.l2_lambda * np.diag(J))
         diag_indices = np.diag_indices(n_nodes)
         grad_J_sym[diag_indices] = grad_J_diag
 
@@ -384,12 +376,7 @@ class generalizedBEG_inference:
     def __init__(self, Q=3, l2_lambda=0.01):
         self.Q = Q
         self.l2_lambda = l2_lambda
-        if Q % 2 == 1:
-            self.states = np.arange(1, Q + 1)
-            self.states = self.states - np.mean(self.states)
-        else:
-            self.states = np.arange(1, Q + 1)
-            self.states = 2 * (self.states - np.mean(self.states))
+        self.states = possible_states(Q)
 
     def _unpack_params(self, theta, n_nodes):
         tridiag_indices = np.triu_indices(n_nodes, k=0)
@@ -435,12 +422,12 @@ class generalizedBEG_inference:
         diff = X - expected_x
         grad_h = -(np.sum(diff, axis=0) - self.l2_lambda * h)
 
-        grad_J_full = -((X.T @ diff) - self.l2_lambda * J)
-        grad_J_sym = grad_J_full + grad_J_full.T
+        data_J = X.T @ diff
+        grad_J_sym = -(data_J + data_J.T - self.l2_lambda * J)
 
         expected_x2 = np.sum(probs * self.states ** 2, axis=2)
         diff_x2 = X ** 2 - expected_x2
-        grad_J_diag = -(0.5 * np.sum(diff_x2, axis=0) - self.l2_lambda * np.diag(J))
+        grad_J_diag = -(0.5 * np.sum(diff_x2, axis=0) - 0.5 * self.l2_lambda * np.diag(J))
         diag_indices = np.diag_indices(n_nodes)
         grad_J_sym[diag_indices] = grad_J_diag
 

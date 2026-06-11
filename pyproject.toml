@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qspin"
-version = "0.1.0"
+version = "1.0.0"
 description = "Generalized Ising / Blume-Capel / Blume-Emery-Griffiths inference and sampling for ordinal questionnaire data."
 readme = "README.md"
 requires-python = ">=3.10"
