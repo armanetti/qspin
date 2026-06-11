@@ -18,20 +18,24 @@ and :class:`mcmc_beg`, both of which expose a ``thermalize`` /
 import numpy as np
 from tqdm import tqdm
 
+from .gauge import possible_states
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
 def _setup_spin_values(Q):
-    """Return (gauge-fixed spin values, mean of {1..Q}, a) for Gibbs updates."""
-    sv = np.arange(1, int(Q) + 1, dtype=float)
-    mv = sv.mean()
-    if Q % 2 == 1:
-        sv = (sv - mv).astype(int); a = 1
-    else:
-        sv = (2 * (sv - mv)).astype(int); a = 0.5
-    return sv, mv, a
+    """Return (gauge-fixed spin values, mean of {1..Q}) for Gibbs updates.
+
+    Delegates the spin-value computation to :func:`gauge.possible_states` so
+    that the convention is defined in a single place.  ``mv`` (the mean of the
+    raw alphabet {1, ..., Q}) is needed for the O(1) spin-to-index mapping
+    ``index = round(sigma + mv - 1)``.
+    """
+    sv = possible_states(Q)
+    mv = (Q + 1) / 2.0   # mean of {1, ..., Q}
+    return sv, mv
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +94,7 @@ def gibbssampling_ising(Q, sigmas, J, h, beta, nsweeps,
       - random site indices / uniform samples pre-generated once per sweep;
       - CDF inversion replaces np.random.choice(range(Q), p=probs).
     """
-    sv, mv, a = _setup_spin_values(Q)
+    sv, mv = _setup_spin_values(Q)
     N = len(sigmas)
     dict_observables: dict = {nome: [] for nome in observables_names}
 
@@ -106,16 +110,17 @@ def gibbssampling_ising(Q, sigmas, J, h, beta, nsweeps,
         for t in range(N):
             i = i_seq[t]
             energy_site = sv * phi[i]
-            log_p = -beta * energy_site
+            log_p = beta * energy_site
             log_p -= log_p.max()
             prob = np.exp(log_p); prob /= prob.sum()
             new_index = min(int(np.searchsorted(np.cumsum(prob), u_seq[t])), Q - 1)
             new_spin = sv[new_index]
 
-            index = int(a * sigmas[i] + mv - 1)
+            # convert current spin to index: sv[k] = k - (Q-1)/2, so k = sv[k] + mv - 1
+            index = int(round(sigmas[i] + mv - 1))
             tot_energy += energy_site[new_index] - energy_site[index]
 
-            delta = int(new_spin) - int(sigmas[i])
+            delta = new_spin - sigmas[i]
             if delta:
                 phi += J[:, i] * delta
             sigmas[i] = new_spin
@@ -143,12 +148,8 @@ def gibbssampling_BC(Q, sigmas, J, h, beta, nsweeps,
         E_i(q) = q * (phi_i - J_{ii} sigma_i) + (1/2) q^2 J_{ii}.
     Setting ``diag(J)=0`` recovers the plain Ising sampler.
     """
-    sv, mv, a = _setup_spin_values(Q)
+    sv, mv = _setup_spin_values(Q)
     sv2 = sv ** 2
-    if Q % 2 == 1:
-        indices = lambda state: int(state + mv - 1)
-    else:
-        indices = lambda state: int(state / 2 + mv - 1)
     N = len(sigmas)
     dict_observables: dict = {nome: [] for nome in observables_names}
 
@@ -166,14 +167,15 @@ def gibbssampling_BC(Q, sigmas, J, h, beta, nsweeps,
             i = i_seq[t]
             eff = phi[i] - diag_J[i] * sigmas[i]
             energy_site = sv * eff + 0.5 * sv2 * diag_J[i]
-            log_p = -beta * energy_site
+            log_p = beta * energy_site
             log_p -= log_p.max()
             prob = np.exp(log_p); prob /= prob.sum()
             new_index = min(int(np.searchsorted(np.cumsum(prob), u_seq[t])), Q - 1)
             new_spin = sv[new_index]
 
-            tot_energy += energy_site[new_index] - energy_site[indices(sigmas[i])]
-            delta = int(new_spin) - int(sigmas[i])
+            index = int(round(sigmas[i] + mv - 1))
+            tot_energy += energy_site[new_index] - energy_site[index]
+            delta = new_spin - sigmas[i]
             if delta:
                 phi += J[:, i] * delta
             sigmas[i] = new_spin
@@ -200,14 +202,9 @@ def gibbssampling_BC_pseudolikelihood(Q, sigmas, J, h, beta, nsweeps,
     Acceptance ratio includes the change in the sum of local log-partition
     functions, so the stationary distribution is the pseudo-likelihood density.
     """
-    spin_values = np.arange(1, int(Q) + 1)
-    mean_value = np.mean(spin_values)
-    if Q % 2 == 1:
-        spin_values = np.array(spin_values - mean_value, dtype=int); a = 1
-    else:
-        spin_values = np.array(2 * (spin_values - mean_value), dtype=int); a = 0.5
+    sv, mv = _setup_spin_values(Q)
 
-    dict_observables = {nome: [] for nome in observables_names}
+    dict_observables: dict = {nome: [] for nome in observables_names}
     N = len(sigmas)
 
     tot_energy = energy_ising(sigmas, J, h)
@@ -218,7 +215,6 @@ def gibbssampling_BC_pseudolikelihood(Q, sigmas, J, h, beta, nsweeps,
     phi = J @ sigmas + h
     eff_all = phi - diag_J * sigmas
 
-    sv = spin_values.astype(float)
     sv2 = sv ** 2
     energy_all = sv[:, np.newaxis] * eff_all[np.newaxis, :] + \
                  0.5 * sv2[:, np.newaxis] * diag_J[np.newaxis, :]
@@ -232,12 +228,12 @@ def gibbssampling_BC_pseudolikelihood(Q, sigmas, J, h, beta, nsweeps,
         for t in range(N):
             i = np.random.randint(N)
             new_index = np.random.randint(Q)
-            new_spin = spin_values[new_index]
+            new_spin = sv[new_index]
 
-            index = int(a * sigmas[i] + mean_value - 1)
+            index = int(round(sigmas[i] + mv - 1))
             delta_energy_metropolis = energy_all[new_index, i] - energy_all[index, i]
 
-            delta = int(new_spin) - int(sigmas[i])
+            delta = new_spin - sigmas[i]
             if delta == 0:
                 continue
 
@@ -246,11 +242,11 @@ def gibbssampling_BC_pseudolikelihood(Q, sigmas, J, h, beta, nsweeps,
 
             energy_attempt = energy_all + sv[:, np.newaxis] * d_eff[np.newaxis, :]
 
-            log_Z_current = _logsumexp_cols(-beta * energy_all)
-            log_Z_attempt = _logsumexp_cols(-beta * energy_attempt)
+            log_Z_current = _logsumexp_cols(beta * energy_all)
+            log_Z_attempt = _logsumexp_cols(beta * energy_attempt)
             deltaZ = np.sum(log_Z_attempt - log_Z_current)
 
-            attempt_prob = np.exp(-beta * delta_energy_metropolis - deltaZ)
+            attempt_prob = np.exp(beta * delta_energy_metropolis - deltaZ)
 
             xi = np.random.random()
             if xi < attempt_prob:
@@ -286,7 +282,7 @@ def gibbssampling_beg(Q, sigmas, J, h, K, beta, nsweeps,
         E_i(q) = q (phi_i - J_{ii} sigma_i) + (1/2) q^2 J_{ii} + q^2 psi_i.
     K has zero diagonal, so psi has no self term.
     """
-    sv, mv, a = _setup_spin_values(Q)
+    sv, mv = _setup_spin_values(Q)
     sv2 = sv ** 2
     N = len(sigmas)
     dict_observables: dict = {nome: [] for nome in observables_names}
@@ -306,17 +302,17 @@ def gibbssampling_beg(Q, sigmas, J, h, K, beta, nsweeps,
             i = i_seq[t]
             eff = phi[i] - diag_J[i] * sigmas[i]
             energy_site = sv * eff + 0.5 * sv2 * diag_J[i] + sv2 * psi[i]
-            log_p = -beta * energy_site
+            log_p = beta * energy_site
             log_p -= log_p.max()
             prob = np.exp(log_p); prob /= prob.sum()
             new_index = min(int(np.searchsorted(np.cumsum(prob), u_seq[t])), Q - 1)
             new_spin = sv[new_index]
 
-            index = int(a * sigmas[i] + mv - 1)
+            index = int(round(sigmas[i] + mv - 1))
             tot_energy += energy_site[new_index] - energy_site[index]
 
-            d_sigma = int(new_spin) - int(sigmas[i])
-            d_sigma2 = int(new_spin) ** 2 - int(sigmas[i]) ** 2
+            d_sigma = new_spin - sigmas[i]
+            d_sigma2 = new_spin ** 2 - sigmas[i] ** 2
             if d_sigma:
                 phi += J[:, i] * d_sigma
             if d_sigma2:
@@ -341,14 +337,9 @@ def gibbssampling_beg_pseudolikelihood(Q, sigmas, J, h, K, beta, nsweeps,
                                        energies_test=False, observables_list=[],
                                        observables_names=[], verbose=False):
     """Pseudo-likelihood Metropolis sampler for the BEG model."""
-    spin_values = np.arange(1, int(Q) + 1)
-    mean_value = np.mean(spin_values)
-    if Q % 2 == 1:
-        spin_values = np.array(spin_values - mean_value, dtype=int); a = 1
-    else:
-        spin_values = np.array(2 * (spin_values - mean_value), dtype=int); a = 1 / 2
+    sv, mv = _setup_spin_values(Q)
 
-    dict_observables = {nome: [] for nome in observables_names}
+    dict_observables: dict = {nome: [] for nome in observables_names}
     N = len(sigmas)
 
     tot_energy = energy_beg(sigmas, J, h, K)
@@ -360,7 +351,6 @@ def gibbssampling_beg_pseudolikelihood(Q, sigmas, J, h, K, beta, nsweeps,
     psi = K @ (sigmas ** 2).astype(float)
     eff_all = phi - diag_J * sigmas
 
-    sv = spin_values.astype(float)
     sv2 = sv ** 2
     energy_all = sv[:, np.newaxis] * eff_all[np.newaxis, :] + \
                  0.5 * sv2[:, np.newaxis] * diag_J[np.newaxis, :] + \
@@ -375,16 +365,16 @@ def gibbssampling_beg_pseudolikelihood(Q, sigmas, J, h, K, beta, nsweeps,
         for t in range(N):
             i = np.random.randint(N)
             new_index = np.random.randint(Q)
-            new_spin = spin_values[new_index]
+            new_spin = sv[new_index]
 
-            index = int(a * sigmas[i] + mean_value - 1)
+            index = int(round(sigmas[i] + mv - 1))
             delta_energy_metropolis = energy_all[new_index, i] - energy_all[index, i]
 
-            delta = int(new_spin) - int(sigmas[i])
+            delta = new_spin - sigmas[i]
             if delta == 0:
                 continue
 
-            delta2 = int(new_spin) ** 2 - int(sigmas[i]) ** 2
+            delta2 = new_spin ** 2 - sigmas[i] ** 2
 
             d_eff = J[:, i] * delta
             d_eff[i] = 0.0
@@ -394,11 +384,11 @@ def gibbssampling_beg_pseudolikelihood(Q, sigmas, J, h, K, beta, nsweeps,
                 + sv[:, np.newaxis] * d_eff[np.newaxis, :] \
                 + sv2[:, np.newaxis] * d_psi[np.newaxis, :]
 
-            log_Z_current = _logsumexp_cols(-beta * energy_all)
-            log_Z_attempt = _logsumexp_cols(-beta * energy_attempt)
+            log_Z_current = _logsumexp_cols(beta * energy_all)
+            log_Z_attempt = _logsumexp_cols(beta * energy_attempt)
             deltaZ = np.sum(log_Z_attempt - log_Z_current)
 
-            attempt_prob = np.exp(-beta * delta_energy_metropolis - deltaZ)
+            attempt_prob = np.exp(beta * delta_energy_metropolis - deltaZ)
 
             xi = np.random.random()
             if xi < attempt_prob:
@@ -458,24 +448,19 @@ class mcmc_ising:
         Setting ``betai = betaf`` performs a plain quench at fixed inverse
         temperature.
         """
-        spin_values = np.arange(1, int(self.Q) + 1)
-        mean_value = np.mean(spin_values)
-        if self.Q % 2 == 1:
-            spin_values = np.array(spin_values - mean_value, dtype=int)
-        else:
-            spin_values = np.array(2 * (spin_values - mean_value), dtype=int)
+        spin_values, _ = _setup_spin_values(self.Q)
 
         if pseudolikelihood:
             mysampler = gibbssampling_BC_pseudolikelihood
         else:
             mysampler = gibbssampling_BC if self.anisotropy else gibbssampling_ising
 
-        sigmas = np.array([0] * self.N, dtype=int)
+        sigmas = np.zeros(self.N, dtype=float)
         match iicc:
             case 'random':
                 sigmas = np.random.choice(spin_values, self.N)
             case 'ordered':
-                sigmas = np.array([0] * self.N, dtype=int)
+                sigmas = np.zeros(self.N, dtype=float)
             case 'given':
                 sigmas = sigmas0
 
@@ -578,19 +563,14 @@ class mcmc_beg:
 
     def thermalize(self, betai, betaf, nsweeps, iicc='ordered', algorithm='G',
                    nb_chunks=20, pseudolikelihood=False, sigmas0=None, verbose=False):
-        spin_values = np.arange(1, int(self.Q) + 1)
-        mean_value = np.mean(spin_values)
-        if self.Q % 2 == 1:
-            spin_values = np.array(spin_values - mean_value, dtype=int)
-        else:
-            spin_values = np.array(2 * (spin_values - mean_value), dtype=int)
+        spin_values, _ = _setup_spin_values(self.Q)
 
-        sigmas = np.array([0] * self.N, dtype=int)
+        sigmas = np.zeros(self.N, dtype=float)
         match iicc:
             case 'random':
                 sigmas = np.random.choice(spin_values, self.N)
             case 'ordered':
-                sigmas = np.array([0] * self.N, dtype=int)
+                sigmas = np.zeros(self.N, dtype=float)
             case 'given':
                 sigmas = sigmas0
 

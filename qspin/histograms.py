@@ -15,7 +15,7 @@ def wilson_score_interval(p, n, mypvalue, return_interval_lengths=False):
     r"""Wilson score confidence interval for a binomial proportion.
 
     Given a fraction :math:`p` estimated from :math:`n` samples, returns the
-    one-sided confidence interval at level :math:`1 - {\rm mypvalue}`.
+    two-sided confidence interval at level :math:`1 - {\rm mypvalue}`.
 
     Parameters
     ----------
@@ -24,11 +24,11 @@ def wilson_score_interval(p, n, mypvalue, return_interval_lengths=False):
     n : int
         Sample size.
     mypvalue : float
-        One-sided tail probability (e.g. 0.05).
+        Two-sided tail probability (e.g. 0.05).
     return_interval_lengths : bool
         If True, return ``[p - p_minus, p_plus - p]`` (half-widths).
     """
-    z = normaldist.ppf(1 - mypvalue, loc=0, scale=1)
+    z = normaldist.ppf(1 - mypvalue/2, loc=0, scale=1)
     p_minus = (p + z ** 2 / (2. * n) - z * np.sqrt(4 * n * p * (1 - p) + z ** 2) / (2 * n)) \
               * (1 + z ** 2 / n) ** (-1)
     p_plus = (p + z ** 2 / (2. * n) + z * np.sqrt(4 * n * p * (1 - p) + z ** 2) / (2 * n)) \
@@ -40,7 +40,7 @@ def wilson_score_interval(p, n, mypvalue, return_interval_lengths=False):
 
 def agresti_coull_interval(p, n, mypvalue, return_interval_lengths=False):
     """Agresti-Coull confidence interval for a binomial proportion."""
-    z = normaldist.ppf(1 - mypvalue, loc=0, scale=1)
+    z = normaldist.ppf(1 - mypvalue/2, loc=0, scale=1)
     ntilde = n + z ** 2
     ptilde = (n * p + z ** 2 / 2) / ntilde
     p_minus = ptilde - z * np.sqrt(ptilde * (1 - ptilde) / ntilde)

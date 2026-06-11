@@ -76,6 +76,25 @@ from .sampling import (
     sample_configurations_likelearning,
 )
 from .jackknife import JKerror
+from .figures import (
+    condition,
+    model_label,
+    plot_losses,
+    plot_moment_matching_learning,
+    plot_moment_matching_sampling,
+    plot_item_histogram,
+    plot_E2d_histogram_maxent,
+    plot_E2d_histogram_simple,
+    plot_E2d_histogram_begvscopula,
+    plot_mahalanobis_commonC_maxent,
+    plot_mahalanobis_modelcov,
+    plot_mahalanobis_commonC_simple,
+    plot_mahalanobis_commonC_begvscopula,
+    plot_pc_histogram_maxent,
+    plot_pc_histogram_simple,
+    plot_factor_histogram_maxent,
+    plot_correlation_time_analysis,
+)
 
 __version__ = "0.1.0"
 
@@ -99,6 +118,15 @@ __all__ = [
     "sample_configurations", "sample_configurations_likelearning",
     # jackknife
     "JKerror",
+    # figures
+    "condition", "model_label",
+    "plot_losses", "plot_moment_matching_learning", "plot_moment_matching_sampling",
+    "plot_item_histogram",
+    "plot_E2d_histogram_maxent", "plot_E2d_histogram_simple", "plot_E2d_histogram_begvscopula",
+    "plot_mahalanobis_commonC_maxent", "plot_mahalanobis_modelcov",
+    "plot_mahalanobis_commonC_simple", "plot_mahalanobis_commonC_begvscopula",
+    "plot_pc_histogram_maxent", "plot_pc_histogram_simple",
+    "plot_factor_histogram_maxent", "plot_correlation_time_analysis",
     # version
     "__version__",
 ]

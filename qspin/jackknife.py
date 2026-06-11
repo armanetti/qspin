@@ -53,19 +53,19 @@ def JKerror(x, bslist, alpha=0.925):
     nbs = np.array(N / bslist - 1, dtype=int)
 
     for ib, bs in enumerate(bslist):
-        nb = int(N / bs) - 1
+        nb = nbs[ib]
         blocks = [np.mean(x[i * bs:(i + 1) * bs]) for i in range(nb)]
 
         myerror2 = np.var(blocks, ddof=1) / nb
-        Oerror = np.sqrt(myerror2)
+        Oerrors[ib] = np.sqrt(myerror2)
+
+        tau = myerror2 / naiveerror2 * 0.5
+        taus[ib] = tau
 
         l = chi2.ppf((1. - alpha) * .5, nb - 1.)
         u = chi2.ppf((1. + alpha) * .5, nb - 1.)
-        erroru = myerror2 * (nb - 1.) / (u * naiveerror2)
-        errorl = myerror2 * (nb - 1.) / (l * naiveerror2)
-
-        Oerrors[ib] = Oerror
-        taus[ib] = myerror2 / naiveerror2 * 0.5
-        tauerrors[ib] = [erroru, errorl]
+        erroru = tau * (nb - 1.) / u
+        errorl = tau * (nb - 1.) / l
+        tauerrors[ib] = [erroru, errorl]  # (lower, upper)
 
     return Oerrors, taus, tauerrors, nbs
