@@ -88,7 +88,9 @@ class generalizedIsing_inference:
             Gauge-fixed data.
         iicc : {'meanfield', 'given'}
             Initial-condition strategy.  ``'meanfield'`` uses the naive mean-field
-            inverse covariance; ``'given'`` requires ``J0`` and ``h0``.
+            inverse covariance; N.B.: this is not the true mean field approximation,
+            but rather a first rough approximation, which nonetheless is sufficient for
+            our purposes, as of now. ``'given'`` requires ``J0`` and ``h0``.
         J0, h0 : ndarrays, optional
             Initial parameters (only used when ``iicc='given'``).
         verbose : bool

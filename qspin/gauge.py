@@ -4,7 +4,7 @@ Gauge-fixing utilities for generalized Ising spin variables.
 The package works with zero-sum (gauge-fixed) spin states.  Raw integer-coded
 data {1, 2, ..., Q} is transformed into
 
-    {-(Q-1)/2, -(Q-1)/2 + 1, ..., 0, ..., (Q-1)/2}     if Q is odd   (integers)
+    {-(Q-1)/2, -(Q-1)/2 + 1, ...,-1, 0, 1, ..., (Q-1)/2}     if Q is odd   (integers)
     {-(Q-1)/2, -(Q-1)/2 + 1, ..., -1/2, 1/2, ..., (Q-1)/2}    if Q is even (half-integers)
 
 matching the paper convention v_q = -(R-1)/2 + (q-1).  For Q even the states

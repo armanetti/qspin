@@ -4,7 +4,7 @@
 sampling for ordinal questionnaire data.**
 
 `qspin` fits energy-based models with discrete spin variables
-`x ∈ {-(Q-1)/2, ..., (Q-1)/2}` (Q odd) or `{-(Q-1), -(Q-1)+2, ..., Q-1}` (Q even)
+`x ∈ {-(Q-1)/2, -(Q-1)/2 + 1, -1, 0 , 1, ..., (Q-1)/2 - 1, (Q-1)/2}` (Q odd, integer spins) or `{-(Q-1)/2, -(Q-1)/2 + 1, -1/2, 1/2, ..., (Q-1)/2 - 1, (Q-1)/2}` (Q even, half-integer spins)
 to ordinal datasets — for instance Likert-scale questionnaire responses. The
 package provides three model families of increasing expressive power:
 
@@ -85,7 +85,7 @@ J, h, K = pcd.naif_fit_euler(
 )
 
 # 3) Sample from the inferred model
-sampler = mcmc_beg(-J, -h, -K, Q=Q)        # note the sign convention
+sampler = mcmc_beg(J, h, K, Q=Q)        # note the sign convention
 sampler.thermalize(betai=0., betaf=1., nsweeps=1000, iicc='random', nb_chunks=100)
 sim = sample_configurations_likelearning(
     sampler, X=X_gf, states=pcd.states,
@@ -105,7 +105,7 @@ dataset, with diagnostic plots.
 |-----------|-----------------|
 | `qspin.gauge` | `bins`, `possible_states`, `gaugefixing_data`, `gaugefixing_data_float` |
 | `qspin.inference` | `generalizedIsing_inference`, `generalizedBC_inference`, `generalizedBEG_inference` (pseudo-likelihood) |
-| `qspin.inference_pcd` | `generalizedIsing_inferencePCD`, `generalizedBC_inferencePCD`, `generalizedBEG_inferencePCD`, `Adam` |
+| `qspin.inference_pcd` | `generalizedIsing_inferencePCD`, `generalizedBC_inferencePCD`, `generalizedBEG_inferencePCD`, `Adam`, `NaiveEuler` |
 | `qspin.mcmc` | `gibbssampling_ising`, `gibbssampling_BC`, `gibbssampling_BC_pseudolikelihood`, `gibbssampling_beg`, `gibbssampling_beg_pseudolikelihood`, `mcmc_ising`, `mcmc_beg`, energy / magnetization helpers |
 | `qspin.sampling` | `sample_configurations`, `sample_configurations_likelearning` |
 | `qspin.jackknife` | `JKerror` — block-Jackknife integrated autocorrelation time |
@@ -124,13 +124,9 @@ The most commonly used names are re-exported at the package root for convenience
 
 A quick reminder, since it bites everyone the first time:
 
-- The **inference** classes parametrize the energy with `-h·x` and `-½ xᵀ J x`
+- The **inference** classes and the **MCMC** wrappers `mcmc_ising` and `mcmc_beg` parametrize the energy with `-h·x` and `-½ xᵀ J x`
   (and `-½ xᵀ K x²` for BEG). The `J_fit`, `h_fit`, `K_fit` returned by `fit()`
   refer to that energy.
-- The **MCMC** wrappers `mcmc_ising` and `mcmc_beg` take `J`, `h`, (`K`) as
-  *positive-energy* coefficients: `E = ½ σᵀ J σ + h·σ`. So when you sample
-  from a fitted model, pass `-J_fit`, `-h_fit`, `-K_fit` to the MCMC
-  constructor (see the quickstart above).
 
 ---
 

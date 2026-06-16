@@ -162,6 +162,24 @@ class Adam:
         params -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
         return params
 
+# ---------------------------------------------------------------------------
+# Naive Euler-fit parameters updater
+# ---------------------------------------------------------------------------
+
+class NaiveEuler:
+    """Naive Euler-fit non-optimized parameters updater.
+
+    Update rule:
+        params -= lr g_t.
+    """
+
+    def __init__(self, lr=0.001):
+        self.lr = lr
+
+
+    def update(self, params, grads):
+        params -= self.lr * grads
+        return params
 
 # ---------------------------------------------------------------------------
 # PCD inference classes
@@ -170,10 +188,11 @@ class Adam:
 class generalizedIsing_inferencePCD:
     """PCD inference for the gauge-fixed generalized Ising model (diag(J)=0)."""
 
-    def __init__(self, Q=3, l2_lambda=0.01):
+    def __init__(self, Q=3, l2_lambda=0.01, use_adam = True):
         self.Q = Q
         self.l2_lambda = l2_lambda
         self.states = possible_states(Q)
+        self.use_adam = use_adam
 
     def _unpack_params(self, theta, n_nodes):
         h = theta[:n_nodes]
@@ -227,7 +246,8 @@ class generalizedIsing_inferencePCD:
                        tau_PCD=20, tau_therm=100, tau_c=None,
                        iicc='meanfield', iicc_configurations='emp',
                        J0=None, h0=None, verbose=False, n_workers=1):
-        """Fit (J, h) by Adam-driven PCD.
+        """Fit (J, h) by Adam-driven PCD if self.use_adam == True,
+         while fit (J,h) by NaiveEuler-driven PCD if self.use_adam == False.
 
         Parameters
         ----------
@@ -262,7 +282,12 @@ class generalizedIsing_inferencePCD:
             protected with ``if __name__ == '__main__':``.
         """
         self.tau_PCD = tau_PCD
-        myadam = Adam(lr=learning_rate)
+        # If use_adam = True, myadam is an instance of the Adam class,
+        # otherwise it is an instance of the NaiveEuler class.
+        if self.use_adam :
+            myadam = Adam(lr=learning_rate)
+        else: 
+            myadam = NaiveEuler(lr=learning_rate)
 
         n_samples, n_nodes = X.shape
         n_j_params = n_nodes * (n_nodes - 1) // 2
@@ -314,7 +339,8 @@ class generalizedIsing_inferencePCD:
                 self.sigmas[n] = sigmas_n
 
             self.losses = np.zeros((niterations, 3))
-
+            if verbose:
+                print("use_adam = %s" % self.use_adam, end="\n\n")
             for n in tqdm(range(niterations)):
                 if tau_c is not None and n % tau_c == 0:
                     for k in range(self.ncopies):
@@ -322,8 +348,9 @@ class generalizedIsing_inferencePCD:
                         self.sigmas[k] = np.copy(X[idx])
 
                 loss, grad = self._objective(theta, X)
+                # If use_adam = True, myadam is an instance of the Adam class,
+                # otherwise it is an instance of the NaiveEuler class.
                 theta = myadam.update(theta, grad)
-
                 self.J_fit, self.h_fit = self._unpack_params(theta, n_nodes)
                 loglik = self.loglikelihood(X) / n_samples
                 self.losses[n] = [loglik, self.lossh, self.lossJ]
@@ -372,10 +399,11 @@ class generalizedIsing_inferencePCD:
 class generalizedBC_inferencePCD:
     """PCD inference for the Blume--Capel model."""
 
-    def __init__(self, Q=3, l2_lambda=0.01):
+    def __init__(self, Q=3, l2_lambda=0.01, use_adam = True):
         self.Q = Q
         self.l2_lambda = l2_lambda
         self.states = possible_states(Q)
+        self.use_adam = use_adam
 
     def _unpack_params(self, theta, n_nodes):
         h = theta[:n_nodes]
@@ -433,9 +461,16 @@ class generalizedBC_inferencePCD:
                        tau_PCD=20, tau_therm=100, tau_c=None,
                        iicc='meanfield', iicc_configurations='emp',
                        J0=None, h0=None, verbose=False, n_workers=1):
-        """Fit (J, h) by Adam-driven PCD.  See :meth:`generalizedIsing_inferencePCD.naif_fit_euler`."""
+        """Fit (J, h) by Adam-driven PCD if self.use_adam == True,
+        while fit (J,h) by NaiveEuler-driven PCD if self.use_adam == False.
+        See :meth:`generalizedIsing_inferencePCD.naif_fit_euler`."""
         self.tau_PCD = tau_PCD
-        myadam = Adam(lr=learning_rate)
+        # If use_adam = True, myadam is an instance of the Adam class,
+        # otherwise it is an instance of the NaiveEuler class.
+        if self.use_adam :
+            myadam = Adam(lr=learning_rate)
+        else: 
+            myadam = NaiveEuler(lr=learning_rate)
 
         n_samples, n_nodes = X.shape
         n_j_params = n_nodes * (n_nodes + 1) // 2
@@ -483,7 +518,8 @@ class generalizedBC_inferencePCD:
                 self.sigmas[n] = sigmas_n
 
             self.losses = np.zeros((niterations, 3))
-
+            if verbose:
+                print("use_adam = %s" % self.use_adam, end="\n\n")
             for n in tqdm(range(niterations)):
                 if tau_c is not None and n % tau_c == 0:
                     for k in range(self.ncopies):
@@ -491,6 +527,8 @@ class generalizedBC_inferencePCD:
                         self.sigmas[k] = np.copy(X[idx])
 
                 loss, grad = self._objective(theta, X)
+                # If use_adam = True, myadam is an instance of the Adam class,
+                # otherwise it is an instance of the NaiveEuler class.
                 theta = myadam.update(theta, grad)
 
                 self.J_fit, self.h_fit = self._unpack_params(theta, n_nodes)
@@ -552,10 +590,11 @@ class generalizedBC_inferencePCD:
 class generalizedBEG_inferencePCD:
     """PCD inference for the Blume--Emery--Griffiths model."""
 
-    def __init__(self, Q=3, l2_lambda=0.01):
+    def __init__(self, Q=3, l2_lambda=0.01, use_adam = True):
         self.Q = Q
         self.l2_lambda = l2_lambda
         self.states = possible_states(Q)
+        self.use_adam = use_adam
 
     def _unpack_params(self, theta, n_nodes):
         tridiag_indices = np.triu_indices(n_nodes, k=0)
@@ -629,9 +668,15 @@ class generalizedBEG_inferencePCD:
                        tau_PCD=20, tau_therm=100, tau_c=None,
                        iicc='meanfield', iicc_configurations='emp',
                        J0=None, h0=None, K0=None, verbose=False, n_workers=1):
-        """Fit (J, h, K) by Adam-driven PCD."""
+        """Fit (J, h, K) by Adam-driven PCD if self.use_adam == True,
+         while fit (J,h, K) by NaiveEuler-driven PCD if self.use_adam == False."""
         self.tau_PCD = tau_PCD
-        myadam = Adam(lr=learning_rate)
+        # If use_adam = True, myadam is an instance of the Adam class,
+        # otherwise it is an instance of the NaiveEuler class.
+        if self.use_adam :
+            myadam = Adam(lr=learning_rate)
+        else: 
+            myadam = NaiveEuler(lr=learning_rate)
 
         n_samples, n_nodes = X.shape
         n_j_params = n_nodes * (n_nodes + 1) // 2
@@ -685,7 +730,8 @@ class generalizedBEG_inferencePCD:
                 self.sigmas[n] = sigmas_n
 
             self.losses = np.zeros((niterations, 4))
-
+            if verbose:
+                print("use_adam = %s" % self.use_adam, end="\n\n")
             for n in tqdm(range(niterations)):
                 if tau_c is not None and n % tau_c == 0:
                     for k in range(self.ncopies):
@@ -693,6 +739,8 @@ class generalizedBEG_inferencePCD:
                         self.sigmas[k] = np.copy(X[idx])
 
                 loss, grad = self._objective(theta, X)
+                # If use_adam = True, myadam is an instance of the Adam class,
+                # otherwise it is an instance of the NaiveEuler class.
                 theta = myadam.update(theta, grad)
 
                 self.J_fit, self.h_fit, self.K_fit = self._unpack_params(theta, n_nodes)

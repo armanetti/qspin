@@ -107,7 +107,7 @@ __all__ = [
     # inference (pseudo-likelihood)
     "generalizedIsing_inference", "generalizedBC_inference", "generalizedBEG_inference",
     # inference (PCD)
-    "Adam",
+    "Adam", "NaiveEuler",
     "generalizedIsing_inferencePCD", "generalizedBC_inferencePCD", "generalizedBEG_inferencePCD",
     # MCMC
     "gibbssampling_ising", "gibbssampling_BC", "gibbssampling_BC_pseudolikelihood",

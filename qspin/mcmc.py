@@ -42,13 +42,13 @@ def _setup_spin_values(Q):
 # Observables
 # ---------------------------------------------------------------------------
 
-def color_fraction(sigmas, Q):
+def color_fraction(sigmas, Q):  # called only in magnetization_potts, which is not used
     """Fraction of sites in each of the Q colours."""
     N_test = len(sigmas)
     return np.array([len(np.where(sigmas == q)[0]) / N_test for q in range(Q)])
 
 
-def magnetization_potts(sigmas, Q):
+def magnetization_potts(sigmas, Q): # never called
     """Potts magnetization derived from :func:`color_fraction`."""
     return np.mean(np.abs(color_fraction(sigmas, Q) - Q ** -1))
 
@@ -58,31 +58,32 @@ def magnetization(sigmas, Q):
     return np.mean(sigmas, axis=0)
 
 
-def effective_nb_colors(sigmas, Q):
+def effective_nb_colors(sigmas, Q): # never called
     """Effective number of colours: Q (1 - Q m / 2)."""
     return Q * (1. - Q * magnetization(sigmas, Q) / 2.)
 
 
-def effnbcol(mag, Q):
+def effnbcol(mag, Q): # never called
     """Effective number of colours, taking a precomputed magnetization."""
     return Q * (1 - Q * mag / 2.)
 
 
 def energy_ising(sigmas, J, h):
-    r"""Ising energy E(sigma) = 1/2 sigma^T J sigma + h^T sigma."""
-    return 0.5 * ((sigmas.T @ J) @ sigmas) + h.T @ sigmas
+    r"""Ising energy E(sigma) = -1/2 sigma^T J sigma - h^T sigma."""
+    return -0.5 * ((sigmas.T @ J) @ sigmas) - h.T @ sigmas
 
 
 def energy_beg(sigmas, J, h, K):
-    r"""BEG energy E(sigma) = 1/2 sigma^T J sigma + h^T sigma + 1/2 (sigma^2)^T K (sigma^2)."""
-    return 0.5 * ((sigmas.T @ J) @ sigmas) + h.T @ sigmas \
-        + 0.5 * (((sigmas ** 2).T @ K) @ (sigmas ** 2))
+    r"""BEG energy E(sigma) = -1/2 sigma^T J sigma - h^T sigma - 1/2 (sigma^2)^T K (sigma^2)."""
+    return -0.5 * ((sigmas.T @ J) @ sigmas) - h.T @ sigmas \
+        - 0.5 * (((sigmas ** 2).T @ K) @ (sigmas ** 2))
 
+
+# In the sampling algorithms below, N stands for M of the article, i.e. for the number of questions
 
 # ---------------------------------------------------------------------------
 # Sampling functions
 # ---------------------------------------------------------------------------
-
 def gibbssampling_ising(Q, sigmas, J, h, beta, nsweeps,
                         energies_test=False, observables_list=[],
                         observables_names=[], verbose=False):
@@ -434,7 +435,7 @@ class mcmc_ising:
     """
 
     def __init__(self, J, h, Q, anisotropy=False):
-        N, _ = J.shape
+        N, _ = J.shape # Here N corresponds to M in the article, i.e. the number of questions
         self.J = np.copy(J)
         self.h = h
         self.Q = Q
