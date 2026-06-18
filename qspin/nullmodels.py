@@ -54,7 +54,7 @@ def catind_model(Y, R, N=1000):
         Sample size to generate.
     """
     _, M = Y.shape
-    constant = 2. if R % 2 == 0 else 1.
+    constant = 1.
 
     frequencies = np.zeros((M, R))
     mybins = _gauge_bins(R)
@@ -120,7 +120,7 @@ def model_gaussdisc(Y, R, N):
     mybins = _gauge_bins(R)
     X_disc = np.empty((N, M), dtype=Y.dtype)
 
-    constant = 2. if R % 2 == 0 else 1.
+    constant = 1.
 
     mu = np.mean(Y, axis=0)
     Sigma = np.cov(Y.T)

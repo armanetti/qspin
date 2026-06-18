@@ -442,7 +442,7 @@ class mcmc_ising:
         self.anisotropy = anisotropy
 
     def thermalize(self, betai, betaf, nsweeps, iicc='ordered', algorithm='G',
-                   nb_chunks=20, pseudolikelihood=False, sigmas0=None, verbose=False):
+                   nb_chunks=20, pseudolikelihood=False, sigmas0=None, verbose=True):
         """Thermalize via (optionally) simulated annealing from betai to betaf.
 
         Setting ``betai = betaf`` performs a plain quench at fixed inverse
@@ -487,7 +487,7 @@ class mcmc_ising:
         return sigmas, energies_series, mag_series
 
     def sample(self, beta, nsweeps_sampling, observables_list=[],
-               observables_names=[], pseudolikelihood=False, verbose=False):
+               observables_names=[], pseudolikelihood=False, verbose=True):
         """Draw a Markov-chain trajectory of ``nsweeps_sampling`` sweeps at ``beta``."""
         if pseudolikelihood:
             mysampler = gibbssampling_BC_pseudolikelihood
@@ -562,7 +562,7 @@ class mcmc_beg:
         self.N = N
 
     def thermalize(self, betai, betaf, nsweeps, iicc='ordered', algorithm='G',
-                   nb_chunks=20, pseudolikelihood=False, sigmas0=None, verbose=False):
+                   nb_chunks=20, pseudolikelihood=False, sigmas0=None, verbose=True):
         spin_values, _ = _setup_spin_values(self.Q)
 
         sigmas = np.zeros(self.N, dtype=float)
@@ -599,7 +599,7 @@ class mcmc_beg:
         return sigmas, energies_series, mag_series
 
     def sample(self, beta, nsweeps_sampling, observables_list=[],
-               observables_names=[], pseudolikelihood=False, verbose=False):
+               observables_names=[], pseudolikelihood=False, verbose=True):
         mysampler = gibbssampling_beg_pseudolikelihood if pseudolikelihood else gibbssampling_beg
 
         sigmas, energies, dict_obs, *_ = mysampler(
