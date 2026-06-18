@@ -85,7 +85,7 @@ J, h, K = pcd.naif_fit_euler(
 )
 
 # 3) Sample from the inferred model
-sampler = mcmc_beg(J, h, K, Q=Q)        # note the sign convention
+sampler = mcmc_beg(-J, -h, -K, Q=Q)        # note the sign convention
 sampler.thermalize(betai=0., betaf=1., nsweeps=1000, iicc='random', nb_chunks=100)
 sim = sample_configurations_likelearning(
     sampler, X=X_gf, states=pcd.states,
@@ -124,9 +124,13 @@ The most commonly used names are re-exported at the package root for convenience
 
 A quick reminder, since it bites everyone the first time:
 
-- The **inference** classes and the **MCMC** wrappers `mcmc_ising` and `mcmc_beg` parametrize the energy with `-h·x` and `-½ xᵀ J x`
+- The **inference** classes parametrize the energy with `-h·x` and `-½ xᵀ J x`
   (and `-½ xᵀ K x²` for BEG). The `J_fit`, `h_fit`, `K_fit` returned by `fit()`
   refer to that energy.
+- The **MCMC** wrappers `mcmc_ising` and `mcmc_beg` take `J`, `h`, (`K`) as
+  *positive-energy* coefficients: `E = ½ σᵀ J σ + h·σ`. So when you sample
+  from a fitted model, pass `-J_fit`, `-h_fit`, `-K_fit` to the MCMC
+  constructor (see the quickstart above).
 
 ---
 
