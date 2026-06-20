@@ -100,7 +100,7 @@ from .figures import (
     plot_correlation_time_analysis,
 )
 
-__version__ = "0.1.0"
+__version__ = "1.1.1"
 
 __all__ = [
     # submodules
