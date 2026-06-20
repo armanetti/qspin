@@ -223,11 +223,11 @@ class generalizedIsing_inferencePCD:
         self.theoretical_mean = theoretical_mean
         return loss, np.concatenate([grad_h, grad_J_flat])
 
-    def naif_fit_euler(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
-                       tau_PCD=20, tau_therm=100, tau_c=None,
-                       iicc='meanfield', iicc_configurations='emp',
-                       J0=None, h0=None, verbose=False, n_workers=1):
-        """Fit (J, h) by Adam-driven PCD.
+    def fit(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
+            tau_PCD=20, tau_therm=100, tau_c=None,
+            iicc='meanfield', iicc_configurations='emp',
+            J0=None, h0=None, optimizer='adam', verbose=False, n_workers=1):
+        """Fit (J, h) via PCD.
 
         Parameters
         ----------
@@ -236,7 +236,7 @@ class generalizedIsing_inferencePCD:
         niterations : int
             Number of gradient updates.
         learning_rate : float
-            Adam learning rate.
+            Learning rate (for both Adam and SGD).
         ncopies : int
             Number of persistent Markov chains.
         tau_PCD : int
@@ -252,6 +252,9 @@ class generalizedIsing_inferencePCD:
             Initial chain configurations (empirical sample or random).
         J0, h0 : ndarrays, optional
             Initial parameters when ``iicc='given'``.
+        optimizer : {'adam', 'sgd'}
+            ``'adam'`` uses the Adam optimizer (Kingma & Ba, 2014);
+            ``'sgd'`` uses plain gradient descent (theta -= lr * grad).
         verbose : bool
             Print per-iteration loss / log-likelihood.
         n_workers : int
@@ -262,7 +265,7 @@ class generalizedIsing_inferencePCD:
             protected with ``if __name__ == '__main__':``.
         """
         self.tau_PCD = tau_PCD
-        myadam = Adam(lr=learning_rate)
+        myadam = Adam(lr=learning_rate) if optimizer == 'adam' else None
 
         n_samples, n_nodes = X.shape
         n_j_params = n_nodes * (n_nodes - 1) // 2
@@ -322,7 +325,10 @@ class generalizedIsing_inferencePCD:
                         self.sigmas[k] = np.copy(X[idx])
 
                 loss, grad = self._objective(theta, X)
-                theta = myadam.update(theta, grad)
+                if myadam is not None:
+                    theta = myadam.update(theta, grad)
+                else:
+                    theta -= learning_rate * grad
 
                 self.J_fit, self.h_fit = self._unpack_params(theta, n_nodes)
                 loglik = self.loglikelihood(X) / n_samples
@@ -429,13 +435,13 @@ class generalizedBC_inferencePCD:
         self.theoretical_mean = theoretical_mean
         return loss, np.concatenate([grad_h, grad_J_flat])
 
-    def naif_fit_euler(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
-                       tau_PCD=20, tau_therm=100, tau_c=None,
-                       iicc='meanfield', iicc_configurations='emp',
-                       J0=None, h0=None, verbose=False, n_workers=1):
-        """Fit (J, h) by Adam-driven PCD.  See :meth:`generalizedIsing_inferencePCD.naif_fit_euler`."""
+    def fit(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
+            tau_PCD=20, tau_therm=100, tau_c=None,
+            iicc='meanfield', iicc_configurations='emp',
+            J0=None, h0=None, optimizer='adam', verbose=False, n_workers=1):
+        """Fit (J, h) via PCD.  See :meth:`generalizedIsing_inferencePCD.fit`."""
         self.tau_PCD = tau_PCD
-        myadam = Adam(lr=learning_rate)
+        myadam = Adam(lr=learning_rate) if optimizer == 'adam' else None
 
         n_samples, n_nodes = X.shape
         n_j_params = n_nodes * (n_nodes + 1) // 2
@@ -491,7 +497,10 @@ class generalizedBC_inferencePCD:
                         self.sigmas[k] = np.copy(X[idx])
 
                 loss, grad = self._objective(theta, X)
-                theta = myadam.update(theta, grad)
+                if myadam is not None:
+                    theta = myadam.update(theta, grad)
+                else:
+                    theta -= learning_rate * grad
 
                 self.J_fit, self.h_fit = self._unpack_params(theta, n_nodes)
                 loglik = self.loglikelihood(X) / n_samples
@@ -625,13 +634,13 @@ class generalizedBEG_inferencePCD:
         self.theoretical_x2x2dag = theoretical_x2x2dag
         return loss, np.concatenate([grad_h, grad_J_flat, grad_K_flat])
 
-    def naif_fit_euler(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
-                       tau_PCD=20, tau_therm=100, tau_c=None,
-                       iicc='meanfield', iicc_configurations='emp',
-                       J0=None, h0=None, K0=None, verbose=False, n_workers=1):
-        """Fit (J, h, K) by Adam-driven PCD."""
+    def fit(self, X, niterations=1000, learning_rate=1.0E-3, ncopies=20,
+            tau_PCD=20, tau_therm=100, tau_c=None,
+            iicc='meanfield', iicc_configurations='emp',
+            J0=None, h0=None, K0=None, optimizer='adam', verbose=False, n_workers=1):
+        """Fit (J, h, K) via PCD.  See :meth:`generalizedIsing_inferencePCD.fit`."""
         self.tau_PCD = tau_PCD
-        myadam = Adam(lr=learning_rate)
+        myadam = Adam(lr=learning_rate) if optimizer == 'adam' else None
 
         n_samples, n_nodes = X.shape
         n_j_params = n_nodes * (n_nodes + 1) // 2
@@ -693,7 +702,10 @@ class generalizedBEG_inferencePCD:
                         self.sigmas[k] = np.copy(X[idx])
 
                 loss, grad = self._objective(theta, X)
-                theta = myadam.update(theta, grad)
+                if myadam is not None:
+                    theta = myadam.update(theta, grad)
+                else:
+                    theta -= learning_rate * grad
 
                 self.J_fit, self.h_fit, self.K_fit = self._unpack_params(theta, n_nodes)
                 loglik = self.loglikelihood(X) / n_samples

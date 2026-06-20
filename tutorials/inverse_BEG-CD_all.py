@@ -51,15 +51,15 @@ from qspin import (
 #######################################################
 # GENERAL SETTINGS AND PARAMETERS
 # -------------------------------------------------------
-DATASETS_LIST = ['big5', 'hexaco', 'sd3', 'mach', 
-                 'iri', 'ei', 'dass', 'cfcs', 'hsns',
-                 'msscq', 'rwas', 'gcbs', 'pwe'] # 'acme',
+DATASETS_LIST = ['big5','cfcs', 'dass', 'ei',  
+                 'gcbs', 'hsns', 'iri', 'mach',
+                 'pwe', 'rwas', 'sd3'] # 'acme','hexaco','msscq',
 #DATASETS_LIST = ['gcbs', 'rwas']  # for quick testing
 NMAX = 10000
 
 # *** PATHS TO CONFIGURE ***
 PATHDATA = "/Users/ariannaarmanetti/Desktop/CODES/datasets/"
-SAVEPATH = "/Users/ariannaarmanetti/Desktop/CODES/inverse-spin/learning/"
+SAVEPATH = "/Users/ariannaarmanetti/Desktop/CODES/inverse-spin/learning-naif/"
 # **************************
 
 os.makedirs(SAVEPATH, exist_ok=True)
@@ -72,6 +72,7 @@ NITERATIONS_PSELIK = 1000
 L_RATES_PSELIK     = 1.0E-7
 # -------------------------------------------------------
 # FULL-LIKELIHOOD LEARNING — Ising and BC share the same schedule
+OPTIMIZER = 'sgd'  # 'adam' or 'sgd'
 NITERATIONS_ISING = [120, 120, 120]
 L_RATES_ISING     = [1.0E-3, 1.0E-3, 1.0E-4]
 TAU_PCD_ISING     = 100
@@ -249,8 +250,9 @@ def process_dataset(dataset, learning='lbfgs'):
     for i in range(n_blocks):
         log(f'PCD Ising | block {i+1}/{n_blocks}  '
             f'ncopies={NCOPIES_ISING[i]}  niter={NITERATIONS_ISING[i]}  lr={L_RATES_ISING[i]}')
-        J0, h0 = inverseisingPCD.naif_fit_euler(
+        J0, h0 = inverseisingPCD.fit(
             np.copy(Xtrain),
+            optimizer=OPTIMIZER,
             niterations=NITERATIONS_ISING[i],
             learning_rate=L_RATES_ISING[i],
             tau_PCD=TAU_PCD_ISING,
@@ -273,8 +275,9 @@ def process_dataset(dataset, learning='lbfgs'):
     for i in range(n_blocks):
         log(f'PCD BC | block {i+1}/{n_blocks}  '
             f'ncopies={NCOPIES_ISING[i]}  niter={NITERATIONS_ISING[i]}  lr={L_RATES_ISING[i]}')
-        J0, h0 = inversebcPCD.naif_fit_euler(
+        J0, h0 = inversebcPCD.fit(
             np.copy(Xtrain),
+            optimizer=OPTIMIZER,
             niterations=NITERATIONS_ISING[i],
             learning_rate=L_RATES_ISING[i],
             tau_PCD=TAU_PCD_ISING,
@@ -298,8 +301,9 @@ def process_dataset(dataset, learning='lbfgs'):
     for i in range(n_blocks_beg):
         log(f'PCD BEG | block {i+1}/{n_blocks_beg}  '
             f'ncopies={NCOPIES_BEG[i]}  niter={NITERATIONS_BEG[i]}  lr={L_RATES_BEG[i]}')
-        J0, h0, K0 = inversebegPCD.naif_fit_euler(
+        J0, h0, K0 = inversebegPCD.fit(
             np.copy(Xtrain),
+            optimizer=OPTIMIZER,
             niterations=NITERATIONS_BEG[i],
             learning_rate=L_RATES_BEG[i],
             tau_PCD=TAU_PCD_BEG,
@@ -372,7 +376,8 @@ def process_dataset(dataset, learning='lbfgs'):
                 n_intersample_sweeps=n_intersample_sweeps,
                 reset=reset,
                 pseudolikelihood=pseudolikelihood,
-                verbose=True)
+                verbose=True,
+                n_jobs=N_WORKERS)
             results.append(sim)
         log(f'sampling | {label} done')
         return results
