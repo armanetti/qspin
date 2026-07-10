@@ -17,7 +17,7 @@ Each worker prints timestamped progress lines prefixed with [dataset].
 CONFIGURATION
 -------------
 The only paths you need to set are PATHDATA and SAVEPATH below.
-qspin is loaded from the qspin-package subfolder of this repo; if you have
+psyspin is loaded from the qspin-package subfolder of this repo; if you have
 installed it via `pip install -e ./qspin-package` you can remove the sys.path block.
 """
 
@@ -28,9 +28,9 @@ import sys
 import time
 
 import numpy as np
-import qspin
-from qspin.data import load_data
-from qspin import (
+import psyspin
+from psyspin.data import load_data
+from psyspin import (
     gaugefixing_data,
     # pseudo-likelihood inference
     generalizedIsing_inference,
@@ -51,10 +51,10 @@ from qspin import (
 #######################################################
 # GENERAL SETTINGS AND PARAMETERS
 # -------------------------------------------------------
-#DATASETS_LIST = ['big5', 'hexaco', 'sd3', 'mach', 
-#                 'iri', 'ei', 'dass', 'cfcs', 'hsns',
-#                 'msscq', 'rwas', 'gcbs', 'pwe'] # 'acme',
-DATASETS_LIST = ['big5']  # for quick testing
+DATASETS_LIST = ['cfcs', 'dass', 'ei',  
+                 'gcbs', 'hsns', 'iri', 'mach',
+                 'pwe', 'rwas', 'sd3']  # 'big5', already done
+#DATASETS_LIST = ['big5']  # for quick testing
 NMAX = 10000
 
 # *** PATHS TO CONFIGURE ***
@@ -233,7 +233,7 @@ def process_dataset(dataset, learning='lbfgs'):
     # =======================================================
     # SAMPLING FROM THE INFERRED MODELS
     # =======================================================
-    # Sign convention: qspin inference and mcmc use the same convention,
+    # Sign convention: psyspin inference and mcmc use the same convention,
     # so J_fit and h_fit are passed directly — no negation needed.
 
     states = inverseising.states

@@ -14,7 +14,7 @@ H(x) denote the energy:
 
 Each class fits ``J`` (and ``h``, and ``K`` for BEG) by maximizing the
 pseudo-likelihood with L-BFGS-B.  Data must be gauge-fixed
-(see :func:`isingq.gauge.gaugefixing_data`) before calling ``fit``.
+(see :func:`psyspin.gauge.gaugefixing_data`) before calling ``fit``.
 """
 
 import numpy as np

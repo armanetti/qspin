@@ -49,10 +49,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/armanetti/qspin"
-Repository = "https://github.com/armanetti/qspin"
-Issues = "https://github.com/armanetti/qspin/issues"
+Homepage = "https://github.com/armanetti/psyspin"
+Repository = "https://github.com/armanetti/psyspin"
+Issues = "https://github.com/armanetti/psyspin/issues"
 
 [tool.setuptools.packages.find]
-include = ["qspin*"]
-exclude = ["tutorials*", "tests*"]
+include = ["psyspin*"]
+exclude = ["tutorials*", "tests*", "local*"]

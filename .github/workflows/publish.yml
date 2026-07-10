@@ -1,13 +1,15 @@
-# Publishes qspin to PyPI.
+# Publishes psyspin to PyPI.
 #
 # Two modes are supported, pick the one you set up on PyPI:
 #
 #  A) Trusted publishing (recommended, no secrets)
-#     - On PyPI: Account settings -> Publishing -> Add a pending publisher
-#       owner = armanetti, repo = qspin,
+#     - The "psyspin" project already exists on PyPI, so this is NOT a
+#       pending publisher: go to https://pypi.org/manage/project/psyspin/settings/publishing/
+#       and add a trusted publisher there with
+#       owner = armanetti, repo = psyspin,
 #       workflow filename = publish.yml,
 #       environment = pypi (matches the `environment:` key below).
-#     - Push a tag like v0.1.0 -> the package is built and uploaded automatically.
+#     - Push a tag like v1.1.2 -> the package is built and uploaded automatically.
 #
 #  B) API-token publishing (fallback)
 #     - On PyPI: Account settings -> API tokens -> create a project-scoped token.
@@ -52,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/qspin/
+      url: https://pypi.org/project/psyspin/
     permissions:
       id-token: write  # required for trusted publishing (OIDC)
     steps:
@@ -67,6 +69,6 @@ jobs:
         with:
           # For trusted publishing leave `password:` commented out.
           # For API-token publishing uncomment the next line:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          # password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true

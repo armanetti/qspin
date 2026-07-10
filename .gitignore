@@ -37,6 +37,9 @@ MANIFEST
 .coverage
 htmlcov/
 
+# Local scratch files (never part of the package or the repo history)
+local/
+
 # Local data and fitted models
 *.pickle
 *.pkl

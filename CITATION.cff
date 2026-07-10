@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite it using the metadata below.
+  See the README for the accompanying paper citation.
+type: software
+title: psyspin
+version: 1.1.1
+date-released: "2026-06-19"
+abstract: >-
+  Generalized Ising / Blume-Capel / Blume-Emery-Griffiths inference and
+  sampling for ordinal questionnaire data.
+authors:
+  - family-names: "Ibañez-Berganza"
+    given-names: "Miguel"
+  - family-names: "Armanetti"
+    given-names: "Arianna"
+    email: arianna.armanetti@imtlucca.it
+license: MIT
+repository-code: "https://github.com/armanetti/psyspin"
+url: "https://github.com/armanetti/psyspin"
+keywords:
+  - ising
+  - blume-capel
+  - blume-emery-griffiths
+  - inverse problem
+  - pseudo-likelihood
+  - persistent contrastive divergence
+  - questionnaire
+  - ordinal data
+  - psychometrics
+# Once the first GitHub release is archived on Zenodo, add the DOI it
+# assigns here, e.g.:
+# identifiers:
+#   - type: doi
+#     value: 10.5281/zenodo.XXXXXXX
+#     description: "The concept DOI for all versions of this software."

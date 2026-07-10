@@ -9,7 +9,7 @@ data {1, 2, ..., Q} is transformed into
 
 matching the paper convention v_q = -(R-1)/2 + (q-1).  For Q even the states
 are half-integers and are stored as float64.  All inference and MCMC routines
-in :mod:`isingq` expect this representation.
+in :mod:`psyspin` expect this representation.
 """
 
 import numpy as np

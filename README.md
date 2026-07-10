@@ -1,9 +1,9 @@
-# qspin
+# psyspin
 
 **Generalized Ising / Blume–Capel / Blume–Emery–Griffiths inference and
 sampling for ordinal questionnaire data.**
 
-`qspin` fits energy-based models with discrete spin variables
+`psyspin` fits energy-based models with discrete spin variables
 `x ∈ {-(Q-1)/2, ..., (Q-1)/2}` (Q odd) or `{-(Q-1), -(Q-1)+2, ..., Q-1}` (Q even)
 to ordinal datasets — for instance Likert-scale questionnaire responses. The
 package provides three model families of increasing expressive power:
@@ -34,9 +34,17 @@ build the figures of the accompanying paper.
 
 The package targets Python ≥ 3.10 (uses structural `match`/`case`).
 
+From PyPI:
+
 ```bash
-git clone https://github.com/armanetti/qspin.git
-cd qspin
+pip install psyspin
+```
+
+For development (editable install from source):
+
+```bash
+git clone https://github.com/armanetti/psyspin.git
+cd psyspin
 pip install -e .
 ```
 
@@ -58,7 +66,7 @@ pip install -e .[dev]
 
 ```python
 import numpy as np
-from qspin import (
+from psyspin import (
     gaugefixing_data,
     generalizedBEG_inference,
     generalizedBEG_inferencePCD,
@@ -103,20 +111,20 @@ dataset, with diagnostic plots.
 
 | submodule | what it provides |
 |-----------|-----------------|
-| `qspin.gauge` | `bins`, `possible_states`, `gaugefixing_data`, `gaugefixing_data_float` |
-| `qspin.inference` | `generalizedIsing_inference`, `generalizedBC_inference`, `generalizedBEG_inference` (pseudo-likelihood) |
-| `qspin.inference_pcd` | `generalizedIsing_inferencePCD`, `generalizedBC_inferencePCD`, `generalizedBEG_inferencePCD`, `Adam` |
-| `qspin.mcmc` | `gibbssampling_ising`, `gibbssampling_BC`, `gibbssampling_BC_pseudolikelihood`, `gibbssampling_beg`, `gibbssampling_beg_pseudolikelihood`, `mcmc_ising`, `mcmc_beg`, energy / magnetization helpers |
-| `qspin.sampling` | `sample_configurations`, `sample_configurations_likelearning` |
-| `qspin.jackknife` | `JKerror` — block-Jackknife integrated autocorrelation time |
-| `qspin.histograms` | `wilson_score_interval`, `agresti_coull_interval`, `bootstrap_histogram` |
-| `qspin.outliers` | `outlier_analysis_means`, `outlier_analysis_factormeans` |
-| `qspin.nullmodels` | `catind_model`, `null_gaussian_copula`, `model_gaussdisc`, `newmanmodularity`, `modularity_general`, `modularity_GMM`, `mixture_chisquared_characteristicfunction`, ... |
-| `qspin.data` | `load_data`, `discretize`, `reshuffle`, `compare2matrices`, `plot2matrices`, `remove_diagonal` |
-| `qspin.figures` | `plot_losses`, `plot_moment_matching_*`, `plot_item_histogram`, `plot_E2d_histogram_*`, `plot_mahalanobis_*`, `plot_pc_histogram_maxent`, `plot_correlation_time_analysis`, default `DEFAULT_COLORS` / `DEFAULT_CFG` |
+| `psyspin.gauge` | `bins`, `possible_states`, `gaugefixing_data`, `gaugefixing_data_float` |
+| `psyspin.inference` | `generalizedIsing_inference`, `generalizedBC_inference`, `generalizedBEG_inference` (pseudo-likelihood) |
+| `psyspin.inference_pcd` | `generalizedIsing_inferencePCD`, `generalizedBC_inferencePCD`, `generalizedBEG_inferencePCD`, `Adam` |
+| `psyspin.mcmc` | `gibbssampling_ising`, `gibbssampling_BC`, `gibbssampling_BC_pseudolikelihood`, `gibbssampling_beg`, `gibbssampling_beg_pseudolikelihood`, `mcmc_ising`, `mcmc_beg`, energy / magnetization helpers |
+| `psyspin.sampling` | `sample_configurations`, `sample_configurations_likelearning` |
+| `psyspin.jackknife` | `JKerror` — block-Jackknife integrated autocorrelation time |
+| `psyspin.histograms` | `wilson_score_interval`, `agresti_coull_interval`, `bootstrap_histogram` |
+| `psyspin.outliers` | `outlier_analysis_means`, `outlier_analysis_factormeans` |
+| `psyspin.nullmodels` | `catind_model`, `null_gaussian_copula`, `model_gaussdisc`, `newmanmodularity`, `modularity_general`, `modularity_GMM`, `mixture_chisquared_characteristicfunction`, ... |
+| `psyspin.data` | `load_data`, `discretize`, `reshuffle`, `compare2matrices`, `plot2matrices`, `remove_diagonal` |
+| `psyspin.figures` | `plot_losses`, `plot_moment_matching_*`, `plot_item_histogram`, `plot_E2d_histogram_*`, `plot_mahalanobis_*`, `plot_pc_histogram_maxent`, `plot_correlation_time_analysis`, default `DEFAULT_COLORS` / `DEFAULT_CFG` |
 
 The most commonly used names are re-exported at the package root for convenience
-(e.g. `from qspin import generalizedBEG_inferencePCD, mcmc_beg`).
+(e.g. `from psyspin import generalizedBEG_inferencePCD, mcmc_beg`).
 
 ---
 
@@ -146,28 +154,33 @@ combination of hyperparameters/resets/models that the paper explored.
 
 ## Citation
 
-If you use `qspin` in academic work, please cite **both** the paper and the
+If you use `psyspin` in academic work, please cite **both** the paper and the
 software:
 
 ```bibtex
-@unpublished{Armanetti2026_qspin_paper,
+@unpublished{Armanetti2026_psyspin_paper,
   author    = {Armanetti, Arianna and Cecchetti, Luca and Sarti, Paolo and Garlaschelli, Diego and Ibañez-Berganzam Miguel},
   title     = {Generalized Ising models for ordinal questionnaire data},
   note      = {In preparation},
   year      = {2026},
 }
 
-@software{Armanetti2026_qspin_pkg,
+@software{Armanetti2026_psyspin_pkg,
   author    = {Ibañez-Berganza, Miguel and Armanetti, Arianna},
-  title     = {{qspin}: Generalized Ising / Blume--Capel /
+  title     = {{psyspin}: Generalized Ising / Blume--Capel /
                 Blume--Emery--Griffiths inference for ordinal questionnaire data},
   year      = {2026},
-  version   = {0.1.0},
-  url       = {https://github.com/armanetti/qspin},
+  version   = {1.1.1},
+  url       = {https://github.com/armanetti/psyspin},
+  doi       = {10.5281/zenodo.XXXXXXX},
 }
 ```
 
-Citation details for the paper will be updated once it is published.
+Citation details for the paper will be updated once it is published. The DOI
+above will be filled in automatically by Zenodo the first time a GitHub
+release is archived (see the DOI section of the setup guide) — replace
+`XXXXXXX` once you have the real record number, or better, point people to
+the "concept DOI" that always resolves to the latest version.
 
 ---
 

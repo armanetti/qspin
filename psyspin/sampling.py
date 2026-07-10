@@ -1,8 +1,8 @@
 """
 Sampling strategies for drawing configurations from a thermalized MCMC instance.
 
-Both helpers take a thermalized :class:`isingq.mcmc.mcmc_ising` or
-:class:`isingq.mcmc.mcmc_beg` and produce a dictionary containing the sampled
+Both helpers take a thermalized :class:`psyspin.mcmc.mcmc_ising` or
+:class:`psyspin.mcmc.mcmc_beg` and produce a dictionary containing the sampled
 configurations, the energy trace, and the sampling parameters.
 
 Two reset strategies are supported between consecutive samples:

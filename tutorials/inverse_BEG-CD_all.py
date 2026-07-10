@@ -17,7 +17,7 @@ Each worker prints timestamped progress lines prefixed with [dataset].
 CONFIGURATION
 -------------
 The only paths you need to set are PATHDATA and SAVEPATH below.
-qspin is loaded from the qspin-package subfolder of this repo; if you have
+psyspin is loaded from the qspin-package subfolder of this repo; if you have
 installed it via `pip install -e ./qspin-package` you can remove the sys.path block.
 """
 
@@ -26,23 +26,38 @@ import os.path as op
 import pickle
 import sys
 import time
-
 import numpy as np
-import qspin
-from qspin.data import load_data
-from qspin import (
-    gaugefixing_data,
+
+import inspect
+import psyspin
+print(">>> DEBUG psyspin path:", psyspin.__file__)
+from psyspin.inference_pcd import generalizedIsing_inferencePCD
+print(">>> DEBUG class has fit:", hasattr(generalizedIsing_inferencePCD, 'fit'))
+print(">>> DEBUG class file:", inspect.getfile(generalizedIsing_inferencePCD))
+
+
+
+import psyspin
+from psyspin.data import load_data
+from psyspin.gauge import gaugefixing_data
+from psyspin.inference_pcd import (
+    # persistent contrastive divergence inference
+    generalizedIsing_inferencePCD, 
+    generalizedBC_inferencePCD, 
+    generalizedBEG_inferencePCD
+)
+from psyspin.inference import (
     # pseudo-likelihood inference
     generalizedIsing_inference,
     generalizedBC_inference,
     generalizedBEG_inference,
-    # persistent contrastive divergence inference
-    generalizedIsing_inferencePCD,
-    generalizedBC_inferencePCD,
-    generalizedBEG_inferencePCD,
+)
+from psyspin.mcmc import (
     # MCMC wrappers
     mcmc_ising,
     mcmc_beg,
+)
+from psyspin.sampling import (
     # sampling
     sample_configurations_likelearning,
 )
@@ -51,15 +66,16 @@ from qspin import (
 #######################################################
 # GENERAL SETTINGS AND PARAMETERS
 # -------------------------------------------------------
-DATASETS_LIST = ['big5','cfcs', 'dass', 'ei',  
-                 'gcbs', 'hsns', 'iri', 'mach',
-                 'pwe', 'rwas', 'sd3'] # 'acme','hexaco','msscq',
-#DATASETS_LIST = ['gcbs', 'rwas']  # for quick testing
+#DATASETS_LIST = ['big5','cfcs', 'dass', 'ei',  
+#                 'gcbs', 'hsns', 'iri', 'mach',
+#                 'pwe', 'rwas', 'sd3'] # 'acme','hexaco','msscq',
+DATASETS_LIST = ['cfcs', 'rwas']  # for quick testing
 NMAX = 10000
 
 # *** PATHS TO CONFIGURE ***
 PATHDATA = "/Users/ariannaarmanetti/Desktop/CODES/datasets/"
-SAVEPATH = "/Users/ariannaarmanetti/Desktop/CODES/inverse-spin/learning-naif/"
+SAVEPATH = "/Users/ariannaarmanetti/Desktop/CODES/inverse-spin/learning2/"
+#SAVEPATH = "/Users/ariannaarmanetti/Desktop/CODES/inverse-spin/learning-naif/"
 # **************************
 
 os.makedirs(SAVEPATH, exist_ok=True)
@@ -72,18 +88,18 @@ NITERATIONS_PSELIK = 1000
 L_RATES_PSELIK     = 1.0E-7
 # -------------------------------------------------------
 # FULL-LIKELIHOOD LEARNING — Ising and BC share the same schedule
-OPTIMIZER = 'sgd'  # 'adam' or 'sgd'
+OPTIMIZER = 'adam'  # 'adam' or 'sgd'
 NITERATIONS_ISING = [120, 120, 120]
 L_RATES_ISING     = [1.0E-3, 1.0E-3, 1.0E-4]
 TAU_PCD_ISING     = 100
 TAU_THERM_ISING   = 10
 NCOPIES_ISING     = [100, 1000, 1000]
-
-NITERATIONS_BEG = [20, 120, 120, 120]
-L_RATES_BEG     = [1.0E-4, 1.0E-4, 1.0E-4, 1.0E-5]
+# EXPERIMENT ONLY FOR RWAS 
+NITERATIONS_BEG = [20, 120, 120, 120, 120] # [20, 120, 120, 120]
+L_RATES_BEG     = [1.0E-4, 1.0E-4, 1.0E-4, 1.0E-4, 1.0E-5] # [1.0E-4, 1.0E-4, 1.0E-4, 1.0E-5]
 TAU_PCD_BEG     = 100
 TAU_THERM_BEG   = 100
-NCOPIES_BEG     = [10, 100, 1000, 1000]
+NCOPIES_BEG     = [10, 100, 1000, 1000, 1000] # [10, 100, 1000, 1000]
 N_WORKERS       = 10 # number of parallel workers for PCD learning 
 # (set to 1 to disable parallelism in PCD) - Note: does not support -1 
 # -------------------------------------------------------
@@ -340,7 +356,7 @@ def process_dataset(dataset, learning='lbfgs'):
     # =======================================================
     # SAMPLING FROM THE INFERRED MODELS
     # =======================================================
-    # Sign convention: qspin inference and mcmc use the same convention,
+    # Sign convention: psyspin inference and mcmc use the same convention,
     # so J_fit and h_fit are passed directly — no negation needed.
 
     states = inverseisingPCD.states

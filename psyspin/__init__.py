@@ -1,29 +1,29 @@
 """
-isingq — Generalized Ising / Blume--Capel / Blume--Emery--Griffiths models
+psyspin — Generalized Ising / Blume--Capel / Blume--Emery--Griffiths models
 for ordinal questionnaire data.
 
 Quick reference
 ---------------
 The package is organized in the following submodules:
 
-* :mod:`isingq.gauge`           gauge-fixing utilities (``bins``, ``possible_states``,
+* :mod:`psyspin.gauge`           gauge-fixing utilities (``bins``, ``possible_states``,
                                 ``gaugefixing_data``).
-* :mod:`isingq.inference`       pseudo-likelihood classes for Ising / BC / BEG.
-* :mod:`isingq.inference_pcd`   persistent Contrastive-Divergence classes
+* :mod:`psyspin.inference`       pseudo-likelihood classes for Ising / BC / BEG.
+* :mod:`psyspin.inference_pcd`   persistent Contrastive-Divergence classes
                                 + Adam optimizer.
-* :mod:`isingq.mcmc`            Gibbs samplers and MCMC wrapper classes
+* :mod:`psyspin.mcmc`            Gibbs samplers and MCMC wrapper classes
                                 (``mcmc_ising``, ``mcmc_beg``) + observables.
-* :mod:`isingq.sampling`        strategies to draw configurations from a
+* :mod:`psyspin.sampling`        strategies to draw configurations from a
                                 thermalized chain.
-* :mod:`isingq.jackknife`       block-Jackknife integrated autocorrelation time.
-* :mod:`isingq.histograms`      Wilson / Agresti-Coull / bootstrap CIs on histograms.
-* :mod:`isingq.outliers`        outlier-subset analysis plots.
-* :mod:`isingq.nullmodels`      categorical-independent, Gaussian, copula, and
+* :mod:`psyspin.jackknife`       block-Jackknife integrated autocorrelation time.
+* :mod:`psyspin.histograms`      Wilson / Agresti-Coull / bootstrap CIs on histograms.
+* :mod:`psyspin.outliers`        outlier-subset analysis plots.
+* :mod:`psyspin.nullmodels`      categorical-independent, Gaussian, copula, and
                                 spectral null models.
-* :mod:`isingq.data`            questionnaire data loaders and simple data
+* :mod:`psyspin.data`            questionnaire data loaders and simple data
                                 utilities (``load_data``, ``discretize``,
                                 ``reshuffle``).
-* :mod:`isingq.figures`         plotting helpers for the figures of the paper.
+* :mod:`psyspin.figures`         plotting helpers for the figures of the paper.
 
 The most common entry points are re-exported at the top level for convenience.
 """

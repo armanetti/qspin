@@ -35,8 +35,8 @@ kindly requested to:
 
   2. cite this software:
 
-       Ibañez-Berganza, M. & Armanetti, A., "qspin: Generalized Ising / Blume-Capel / Blume-Emery-Griffiths inference for ordinal questionnaires data," version 0.1.0,
-       1.     https://github.com/armanetti/qspin
+       Ibañez-Berganza, M. & Armanetti, A., "psyspin: Generalized Ising / Blume-Capel / Blume-Emery-Griffiths inference for ordinal questionnaires data," version 0.1.0,
+       1.     https://github.com/armanetti/psyspin
 
   3. contact the author at arianna.armanetti@imtlucca.it to discuss usage,
      collaboration, or questions regarding the package or the paper.
