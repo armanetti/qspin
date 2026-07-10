@@ -10,23 +10,30 @@ package provides three model families of increasing expressive power:
 
 | model | Hamiltonian | comment |
 |------|-------------|---------|
-| **Ising** | `H(x) = -h·x - ½ xᵀ J x`, `diag(J)=0` | minimal pairwise model |
-| **Blume–Capel (BC)** | `H(x) = -h·x - ½ xᵀ J x`, `diag(J)` free | adds a per-site anisotropy on `x_i²` |
-| **Blume–Emery–Griffiths (BEG)** | `H(x) = -h·x - ½ xᵀ J x - ½ ∑_{i≠j} K_{ij} x_i² x_j²` | adds a biquadratic coupling, captures variance correlations |
+| **Ising** | $\displaystyle H(x) = -h\cdot x - \frac{1}{2} x^\top J x$<br>$\mathrm{diag}(J)=0$ | minimal pairwise model |
+| **Blume–Capel (BC)** | $\displaystyle H(x) = -h\cdot x - \frac{1}{2} x^\top J x$<br>$\mathrm{diag}(J)$ free | adds a per-site anisotropy on $x_i^2$ |
+| **Blume–Emery–Griffiths (BEG)** | $\displaystyle H(x) = -h\cdot x - \frac{1}{2} x^\top J x - \frac{1}{2}\sum_{i\neq j} K_{ij}\, x_i^2 x_j^2$ | adds a biquadratic coupling, captures intensity-intensity relations |
 
-For each model the package offers two inference strategies:
+Each model can be fit along two alternative paths, not two independent
+strategies:
 
-- **Pseudo-likelihood** (PL): closed-form gradient, L-BFGS-B optimization
-  (`generalizedIsing_inference`, `generalizedBC_inference`,
-  `generalizedBEG_inference`).
-- **Persistent Contrastive Divergence** (PCD): persistent Gibbs chains, Adam
+- **Pseudo-likelihood alone** (PL): closed-form gradient, L-BFGS-B
+  optimization (`generalizedIsing_inference`, `generalizedBC_inference`,
+  `generalizedBEG_inference`). Fast and easy, but only a rough estimate —
+  moment matching between the fitted model and the data is not guaranteed.
+- **Pseudo-likelihood + Persistent Contrastive Divergence** (PL→PCD): PL
+  provides a fast warm-start, then persistent Gibbs chains refined with Adam
   gradient updates (`generalizedIsing_inferencePCD`,
-  `generalizedBC_inferencePCD`, `generalizedBEG_inferencePCD`).
+  `generalizedBC_inferencePCD`, `generalizedBEG_inferencePCD`) take over.
+  Computationally heavier, but it guarantees moment matching — this is the
+  path used for the results in the paper.
 
 It also includes optimized random-sequential Gibbs samplers (`mcmc_ising`,
 `mcmc_beg`), null models for comparison (Gaussian, Gaussian copula,
 categorical-independent, GMM spectral cleaning), and plotting helpers used to
-build the figures of the accompanying paper.
+build the figures of the accompanying paper, [*Inverse generalised spin
+models of answers to questionnaires*](https://arxiv.org/abs/2605.29739)
+(arXiv:2605.29739).
 
 ---
 
@@ -93,7 +100,7 @@ J, h, K = pcd.naif_fit_euler(
 )
 
 # 3) Sample from the inferred model
-sampler = mcmc_beg(-J, -h, -K, Q=Q)        # note the sign convention
+sampler = mcmc_beg(J, h, K, Q=Q)           # same sign convention as fit()
 sampler.thermalize(betai=0., betaf=1., nsweeps=1000, iicc='random', nb_chunks=100)
 sim = sample_configurations_likelearning(
     sampler, X=X_gf, states=pcd.states,
@@ -130,25 +137,36 @@ The most commonly used names are re-exported at the package root for convenience
 
 ## Sign conventions
 
-A quick reminder, since it bites everyone the first time:
-
-- The **inference** classes parametrize the energy with `-h·x` and `-½ xᵀ J x`
-  (and `-½ xᵀ K x²` for BEG). The `J_fit`, `h_fit`, `K_fit` returned by `fit()`
-  refer to that energy.
-- The **MCMC** wrappers `mcmc_ising` and `mcmc_beg` take `J`, `h`, (`K`) as
-  *positive-energy* coefficients: `E = ½ σᵀ J σ + h·σ`. So when you sample
-  from a fitted model, pass `-J_fit`, `-h_fit`, `-K_fit` to the MCMC
-  constructor (see the quickstart above).
+Inference and sampling now share a single, consistent convention: the energy
+is `H(x) = -h·x - ½ xᵀ J x` (and `-½ xᵀ K x²` for BEG). The `J_fit`, `h_fit`,
+`K_fit` returned by `fit()` can be passed **directly, unnegated**, into
+`mcmc_ising` / `mcmc_beg` — there is no sign flip to remember (see the
+quickstart above). This also matches what the PCD training loop does
+internally, since it samples from the persistent chains using the very same
+parameters it is fitting.
 
 ---
 
 ## Reproducing the paper
 
-The original repository ships the per-dataset scripts that produced every
-figure in the paper. They are kept as reference under
-`inverse_spinmodel/learning_cd_3rdattempt/`. The tutorial notebook is a
-compact substitute for the most common workflow; it does not run every
-combination of hyperparameters/resets/models that the paper explored.
+Everything needed to reproduce the paper's results lives under `tutorials/`:
+
+- `inverse_BEG-CD_all.py` runs the full pipeline for one or more datasets —
+  PL fit, PL→PCD refinement, and MCMC sampling for the Ising, BC, and BEG
+  models — and saves the fitted parameters and sampled configurations.
+  `inverse_BEG-pselik_all.py` is the PL-only variant.
+- `figures_all_datasets.ipynb` turns those saved results into the figures
+  used in the paper.
+- `tutorial.ipynb` is a lighter, single-dataset walkthrough for getting
+  familiar with the workflow interactively.
+
+As a rough timing reference: with `N_WORKERS=10` (parallel PCD chains /
+sampling), a full run of `inverse_BEG-CD_all.py` on one dataset (~8,000
+training subjects, all three models, PL→PCD fit + 1,000,000-configuration
+sampling + observables) took about 21 minutes for a 12-item questionnaire
+and about 37 minutes for a 22-item one in previous runs on this machine;
+expect up to ~1h for larger questionnaires (30+ items), since the cost grows
+with the number of items `M`.
 
 ---
 
@@ -158,11 +176,14 @@ If you use `psyspin` in academic work, please cite **both** the paper and the
 software:
 
 ```bibtex
-@unpublished{Armanetti2026_psyspin_paper,
-  author    = {Armanetti, Arianna and Cecchetti, Luca and Sarti, Paolo and Garlaschelli, Diego and Ibañez-Berganzam Miguel},
-  title     = {Generalized Ising models for ordinal questionnaire data},
-  note      = {In preparation},
-  year      = {2026},
+@article{Armanetti2026_psyspin_paper,
+  author        = {Armanetti, Arianna and Cecchetti, Luca and Sarti, Paolo and Garlaschelli, Diego and Ibañez-Berganza, Miguel},
+  title         = {Inverse generalised spin models of answers to questionnaires},
+  journal       = {arXiv preprint arXiv:2605.29739},
+  eprint        = {2605.29739},
+  archivePrefix = {arXiv},
+  year          = {2026},
+  url           = {https://arxiv.org/abs/2605.29739},
 }
 
 @software{Armanetti2026_psyspin_pkg,
@@ -170,17 +191,17 @@ software:
   title     = {{psyspin}: Generalized Ising / Blume--Capel /
                 Blume--Emery--Griffiths inference for ordinal questionnaire data},
   year      = {2026},
-  version   = {1.1.1},
+  version   = {1.1.2},
   url       = {https://github.com/armanetti/psyspin},
   doi       = {10.5281/zenodo.XXXXXXX},
 }
 ```
 
-Citation details for the paper will be updated once it is published. The DOI
-above will be filled in automatically by Zenodo the first time a GitHub
-release is archived (see the DOI section of the setup guide) — replace
-`XXXXXXX` once you have the real record number, or better, point people to
-the "concept DOI" that always resolves to the latest version.
+The paper is available on arXiv: [arXiv:2605.29739](https://arxiv.org/abs/2605.29739).
+The software DOI above will be filled in automatically by Zenodo the first
+time a GitHub release is archived — replace `XXXXXXX` once you have the real
+record number, or better, point people to the "concept DOI" that always
+resolves to the latest version.
 
 ---
 

@@ -4,8 +4,8 @@ message: >-
   See the README for the accompanying paper citation.
 type: software
 title: psyspin
-version: 1.1.1
-date-released: "2026-06-19"
+version: 1.1.2
+date-released: "2026-07-10"
 abstract: >-
   Generalized Ising / Blume-Capel / Blume-Emery-Griffiths inference and
   sampling for ordinal questionnaire data.
@@ -28,6 +28,26 @@ keywords:
   - questionnaire
   - ordinal data
   - psychometrics
+references:
+  - type: article
+    title: "Inverse generalised spin models of answers to questionnaires"
+    year: 2026
+    authors:
+      - family-names: "Armanetti"
+        given-names: "Arianna"
+      - family-names: "Cecchetti"
+        given-names: "Luca"
+      - family-names: "Sarti"
+        given-names: "Paolo"
+      - family-names: "Garlaschelli"
+        given-names: "Diego"
+      - family-names: "Ibañez-Berganza"
+        given-names: "Miguel"
+    identifiers:
+      - type: other
+        value: "arXiv:2605.29739"
+        description: "arXiv preprint"
+    url: "https://arxiv.org/abs/2605.29739"
 # Once the first GitHub release is archived on Zenodo, add the DOI it
 # assigns here, e.g.:
 # identifiers:
