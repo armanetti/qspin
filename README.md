@@ -193,7 +193,7 @@ software:
   year      = {2026},
   version   = {1.1.2},
   url       = {https://github.com/armanetti/psyspin},
-  doi       = {10.5281/zenodo.XXXXXXX},
+  doi       = {10.5281/zenodo.21679124},
 }
 ```
 
